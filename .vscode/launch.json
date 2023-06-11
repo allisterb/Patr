@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["did", "allisterb.eth", "${env:INFURA_PATR_KEY}"],
+            "args": ["did", "resolve", "allisterb.eth", "${env:INFURA_PATR_KEY}"],
             "env": {"CGO_ENABLED":"0"}
         }
     ]

@@ -3,14 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/kong"
-	"github.com/allisterb/patr/blockchain"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/mbndr/figlet4go"
+
+	"github.com/allisterb/patr/blockchain"
 )
 
 type DidCmd struct {
+	Cmd       string `arg:"" name:"cmd" help:"Command to run. Can be one of: resolve, profile."`
 	Name      string `arg:"" name:"name" help:"Get the DID linked to this name."`
 	ApiSecret string `arg:"" name:"api-secret" help:"The Infura API secret key to use."`
 }
@@ -59,8 +62,20 @@ func main() {
 }
 
 func (c *DidCmd) Run(clictx *kong.Context) error {
-	a, _ := blockchain.ResolveENS(c.Name, c.ApiSecret)
-	log.Infof("%s", a)
+	switch strings.ToLower(c.Cmd) {
+	case "resolve":
+		log.Infof("Resolving ENS name %v...", c.Name)
+		r, err := blockchain.ResolveENS(c.Name, c.ApiSecret)
+		if err != nil {
+			log.Errorf("Error resolving ENS name.")
+		} else {
+			log.Infof("Resolved ENS name %v", c.Name)
+			fmt.Printf("Address: %s\nContent-Hash: %s\nAvatar: %s\nPublic-Key: %s", r.Address, r.ContentHash, r.Avatar, r.Pubkey)
+		}
+	default:
+		log.Errorf("Unknown command: %s", c.Cmd)
+	}
+	return nil
 
 	//priv, pub := crypto.GenerateIdentity()
 	//clientConfig := models.Config{Pubkey: pub, PrivKey: priv}
@@ -72,7 +87,7 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 	//}
 	//log.Infof("client identity is %s.", crypto.GetIdentity(pub).Pretty())
 	//log.Infof("citizen5 client initialized.")
-	return nil
+
 }
 
 func (c *InitUserCmd) Run(clictx *kong.Context) error {
