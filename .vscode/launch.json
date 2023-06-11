@@ -10,7 +10,8 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["submit", "1234", "media-report", "data/media-report.json"]
+            "args": ["did", "allisterb.eth", "${env:INFURA_PATR_KEY}"],
+            "env": {"CGO_ENABLED":"0"}
         }
     ]
 }

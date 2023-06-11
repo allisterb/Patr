@@ -10,17 +10,17 @@ import (
 
 var log = logging.Logger("patr/blockchain")
 
-func foo() {
-	client, err := ethclient.Dial("https://mainnet.infura.io/v3/SECRET")
+func ResolveENS(name string, apiSecret string) (string, error) {
+	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apiSecret))
 	if err != nil {
 		panic(err)
 	}
 
 	// Resolve a name to an address.
-	domain := "ethereum.eth"
-	address, err := ens.Resolve(client, domain)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("Address of %s is %s\n", domain, address.Hex())
+	//address, err := ens.Resolve(client, name)
+	namex, err := ens.NewName(client, name)
+	//namex.Address(())
+
+	return namex.Name, err
+	//fmt.Printf("Address of %s is %s\n", name, address.)
 }

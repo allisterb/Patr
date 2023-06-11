@@ -5,9 +5,15 @@ import (
 	"os"
 
 	"github.com/alecthomas/kong"
+	"github.com/allisterb/patr/blockchain"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/mbndr/figlet4go"
 )
+
+type DidCmd struct {
+	Name      string `arg:"" name:"name" help:"Get the DID linked to this name."`
+	ApiSecret string `arg:"" name:"api-secret" help:"The Infura API secret key to use."`
+}
 
 type InitUserCmd struct {
 	Name string `arg:"" name:"name" help:"Initialize the client for this name."`
@@ -18,6 +24,7 @@ var log = logging.Logger("patr/main")
 // Command-line arguments
 var CLI struct {
 	Debug    bool        `help:"Enable debug mode."`
+	Did      DidCmd      `cmd:"" help:"Get the DID linked to this name."`
 	InitUser InitUserCmd `cmd:"" help:"Initialize the citizen5 server."`
 }
 
@@ -49,8 +56,23 @@ func main() {
 
 	ctx := kong.Parse(&CLI)
 	ctx.FatalIfErrorf(ctx.Run(&kong.Context{}))
+}
 
-	log.Info("starting")
+func (c *DidCmd) Run(clictx *kong.Context) error {
+	a, _ := blockchain.ResolveENS(c.Name, c.ApiSecret)
+	log.Infof("%s", a)
+
+	//priv, pub := crypto.GenerateIdentity()
+	//clientConfig := models.Config{Pubkey: pub, PrivKey: priv}
+	//data, _ := json.MarshalIndent(clientConfig, "", " ")
+	//err := ioutil.WriteFile(filepath.Join(util.GetUserHomeDir(), ".citizen5", "client.json"), data, 0644)
+	//if err != nil {
+	//	log.Errorf("error creating client configuration file: %v", err)
+	//	return nil
+	//}
+	//log.Infof("client identity is %s.", crypto.GetIdentity(pub).Pretty())
+	//log.Infof("citizen5 client initialized.")
+	return nil
 }
 
 func (c *InitUserCmd) Run(clictx *kong.Context) error {
