@@ -10,6 +10,7 @@ import (
 	"github.com/mbndr/figlet4go"
 
 	"github.com/allisterb/patr/blockchain"
+	"github.com/allisterb/patr/did"
 )
 
 type DidCmd struct {
@@ -64,14 +65,22 @@ func main() {
 func (c *DidCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
 	case "resolve":
-		log.Infof("Resolving ENS name %v...", c.Name)
-		r, err := blockchain.ResolveENS(c.Name, c.ApiSecret)
+		d, err := did.Parse(c.Name)
 		if err != nil {
-			log.Errorf("Error resolving ENS name.")
-		} else {
-			log.Infof("Resolved ENS name %v", c.Name)
-			fmt.Printf("Address: %s\nContent-Hash: %s\nAvatar: %s\nPublic-Key: %s", r.Address, r.ContentHash, r.Avatar, r.Pubkey)
+			log.Errorf("Could not parse DID %s: %v", c.Name, err)
+			return err
 		}
+		if d.ID.Method != "ens" {
+			log.Errorf("Only ENS DIDs are supported currently.")
+			return nil
+		}
+		r, err := blockchain.ResolveENS(d.ID.ID, c.ApiSecret)
+		if err == nil {
+			fmt.Printf("Address: %s\nContent-Hash: %s\nAvatar: %s\nPublic-Key: %s", r.Address, r.ContentHash, r.Avatar, r.Pubkey)
+		} else {
+			return err
+		}
+
 	default:
 		log.Errorf("Unknown command: %s", c.Cmd)
 	}

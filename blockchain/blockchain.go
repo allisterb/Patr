@@ -14,12 +14,12 @@ import (
 var log = logging.Logger("patr/blockchain")
 
 func ResolveENS(name string, apiSecret string) (models.ENSName, error) {
+	log.Infof("Resolving ENS name %v...", name)
 	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apiSecret))
 	if err != nil {
 		log.Errorf("Could not create Infura Ethereum API client: %v", err)
 		return models.ENSName{}, err
 	}
-
 	r, err := ens.NewResolver(client, name)
 	if err != nil {
 		log.Errorf("Could not create resolver ENS name %s: %v", name, err)
@@ -44,6 +44,8 @@ func ResolveENS(name string, apiSecret string) (models.ENSName, error) {
 		log.Errorf("Could not resolve public key for ENS name %s: %v", name, err)
 		return models.ENSName{}, err
 	}
+
+	log.Infof("Resolved ENS name %v", name)
 
 	record := models.ENSName{
 		Address:     address.Hex(),
