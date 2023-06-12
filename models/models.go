@@ -6,3 +6,4 @@ type ENSName struct {
 	Avatar      string
 	Pubkey      string
 }
+

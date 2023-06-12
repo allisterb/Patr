@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -13,7 +15,10 @@ import (
 	"github.com/allisterb/patr/blockchain"
 	"github.com/allisterb/patr/did"
 	"github.com/allisterb/patr/feed"
+	"github.com/allisterb/patr/ipfs"
+	"github.com/allisterb/patr/node"
 	"github.com/allisterb/patr/nostr"
+	"github.com/allisterb/patr/util"
 )
 
 type DidCmd struct {
@@ -30,6 +35,10 @@ type FeedCmd struct {
 	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: gen-keys."`
 }
 
+type NodeCmd struct {
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: init."`
+}
+
 var log = logging.Logger("patr/main")
 
 // Command-line arguments
@@ -38,6 +47,7 @@ var CLI struct {
 	Did   DidCmd   `cmd:"" help:"Run commands on the DID linked to a name."`
 	Nostr NostrCmd `cmd:"" help:"Run Nostr commands."`
 	Feed  FeedCmd  `cmd:"" help:"Run Patr feed commands."`
+	Node  NodeCmd  `cmd:"" help:"Run Patr node commands."`
 }
 
 func init() {
@@ -157,4 +167,41 @@ func (c *FeedCmd) Run(clictx *kong.Context) error {
 		log.Errorf("Unknown feed command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN FEED COMMAND: %s", c.Cmd)
 	}
+}
+
+func (c *NodeCmd) Run(clictx *kong.Context) error {
+	switch strings.ToLower(c.Cmd) {
+	case "init":
+		d := filepath.Join(util.GetUserHomeDir(), ".patr")
+		if _, err := os.Stat(d); err != nil {
+			err := os.Mkdir(d, 0755)
+			if err != nil {
+				log.Errorf("Error creating node configuration directory %s: %v", d, err)
+				return err
+			}
+		}
+		f := filepath.Join(d, "node.json")
+		if _, err := os.Stat(f); err == nil {
+			log.Errorf("node configuration file %s already exists", f)
+			return nil
+		}
+		priv, pub, err := ipfs.GenerateIPFSNodeKeyPair()
+		if err != nil {
+			return err
+		}
+		config := node.Config{Pubkey: pub, PrivKey: priv}
+		data, _ := json.MarshalIndent(config, "", " ")
+		err = os.WriteFile(filepath.Join(d, "node.json"), data, 0644)
+		if err != nil {
+			log.Errorf("error creating node configuration file: %v", err)
+			return err
+		}
+		log.Infof("node identity is %s", ipfs.GetIPFSNodeIdentity(pub).Pretty())
+		log.Infof("patr node configuration initialized at %s", filepath.Join(d, "node.json"))
+		return nil
+	default:
+		log.Errorf("Unknown node command: %s", c.Cmd)
+		return fmt.Errorf("UNKNOWN NODE COMMAND: %s", c.Cmd)
+	}
+
 }

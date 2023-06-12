@@ -2,6 +2,7 @@ package ipfs
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 
 	iface "github.com/ipfs/boxo/coreiface"
@@ -18,13 +19,33 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-var log = logging.Logger("citizen5/ipfs")
+var log = logging.Logger("patr/ipfs")
 
-func GetIdentity(pubkey string) peer.ID {
-	pubb, err := base64.StdEncoding.DecodeString(pubkey)
+func GenerateIPFSNodeKeyPair() ([]byte, []byte, error) {
+	priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
+	if err != nil {
+		log.Errorf("Error generating RSA 2048-bit keypair: %v", err)
+		return []byte{}, []byte{}, err
+	}
+	privkeyb, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		log.Errorf("Error marshalling RSA 2048-bit private key: %v", err)
+		return []byte{}, []byte{}, err
+	}
+	pubkeyb, err := crypto.MarshalPublicKey(pub)
+	if err != nil {
+		log.Errorf("Error marshalling RSA 2048-bit public key: %v", err)
+		return []byte{}, []byte{}, err
+	}
+	id, err := peer.IDFromPublicKey(pub)
 	if err != nil {
 		panic(err)
 	}
+	log.Infof("generated identity %s", id.Pretty())
+	return privkeyb, pubkeyb, err
+}
+
+func GetIPFSNodeIdentity(pubb []byte) peer.ID {
 	pub, err := crypto.UnmarshalPublicKey(pubb)
 	if err != nil {
 		panic(err)
@@ -36,8 +57,8 @@ func GetIdentity(pubkey string) peer.ID {
 	return id
 }
 
-func initIPFSRepo(ctx context.Context, privkey string, pubkey string) repo.Repo {
-	pid := GetIdentity(pubkey)
+func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo {
+	pid := GetIPFSNodeIdentity(pubkey)
 	c := cfg.Config{}
 	c.Pubsub.Enabled = cfg.True
 	c.Bootstrap = []string{
@@ -48,7 +69,7 @@ func initIPFSRepo(ctx context.Context, privkey string, pubkey string) repo.Repo 
 	}
 	c.Addresses.Swarm = []string{"/ip4/127.0.0.1/tcp/4001", "/ip4/127.0.0.1/udp/4001/quic"}
 	c.Identity.PeerID = pid.Pretty()
-	c.Identity.PrivKey = privkey
+	c.Identity.PrivKey = base64.StdEncoding.EncodeToString(privkey)
 
 	return &repo.Mock{
 		D: dsync.MutexWrap(ds.NewMapDatastore()),
@@ -56,8 +77,8 @@ func initIPFSRepo(ctx context.Context, privkey string, pubkey string) repo.Repo 
 	}
 }
 
-func InitIPFSApi(ctx context.Context, privkey string, pubkey string) (iface.CoreAPI, func(), error) {
-	log.Infof("starting IPFS node %s...", GetIdentity(pubkey).Pretty())
+func InitIPFSApi(ctx context.Context, privkey []byte, pubkey []byte) (iface.CoreAPI, func(), error) {
+	log.Infof("starting IPFS node %s...", GetIPFSNodeIdentity(pubkey).Pretty())
 	node, err := ipfsCore.NewNode(ctx, &ipfsCore.BuildCfg{
 		Online:  true,
 		Routing: libp2p.DHTOption,
