@@ -24,17 +24,17 @@ var log = logging.Logger("patr/ipfs")
 func GenerateIPFSNodeKeyPair() ([]byte, []byte, error) {
 	priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
 	if err != nil {
-		log.Errorf("Error generating RSA 2048-bit keypair: %v", err)
+		log.Errorf("error generating RSA 2048-bit keypair: %v", err)
 		return []byte{}, []byte{}, err
 	}
 	privkeyb, err := crypto.MarshalPrivateKey(priv)
 	if err != nil {
-		log.Errorf("Error marshalling RSA 2048-bit private key: %v", err)
+		log.Errorf("error marshalling RSA 2048-bit private key: %v", err)
 		return []byte{}, []byte{}, err
 	}
 	pubkeyb, err := crypto.MarshalPublicKey(pub)
 	if err != nil {
-		log.Errorf("Error marshalling RSA 2048-bit public key: %v", err)
+		log.Errorf("error marshalling RSA 2048-bit public key: %v", err)
 		return []byte{}, []byte{}, err
 	}
 	id, err := peer.IDFromPublicKey(pub)
@@ -77,7 +77,7 @@ func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo 
 	}
 }
 
-func InitIPFSApi(ctx context.Context, privkey []byte, pubkey []byte) (iface.CoreAPI, func(), error) {
+func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (iface.CoreAPI, func(), error) {
 	log.Infof("starting IPFS node %s...", GetIPFSNodeIdentity(pubkey).Pretty())
 	node, err := ipfsCore.NewNode(ctx, &ipfsCore.BuildCfg{
 		Online:  true,
@@ -88,9 +88,10 @@ func InitIPFSApi(ctx context.Context, privkey []byte, pubkey []byte) (iface.Core
 		},
 	})
 	if err != nil {
+		log.Errorf("error staring IPFS node %s: %v", GetIPFSNodeIdentity(pubkey).Pretty(), err)
 		return nil, nil, err
 	}
-	log.Infof("IPFS node %s started.", node.Identity.Pretty())
+	log.Infof("IPFS node %s started", node.Identity.Pretty())
 	c, e := coreapi.NewCoreAPI(node)
 	if e != nil {
 		return nil, nil, e
@@ -98,7 +99,7 @@ func InitIPFSApi(ctx context.Context, privkey []byte, pubkey []byte) (iface.Core
 		clean := func() {
 			log.Infof("shutting down IPFS node %s...", node.Identity.Pretty())
 			node.Close()
-			log.Infof("IPFS node %s shutdown completed.", node.Identity.Pretty())
+			log.Infof("IPFS node %s shutdown completed", node.Identity.Pretty())
 		}
 		return c, clean, e
 	}

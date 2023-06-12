@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -176,7 +177,7 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 		if _, err := os.Stat(d); err != nil {
 			err := os.Mkdir(d, 0755)
 			if err != nil {
-				log.Errorf("Error creating node configuration directory %s: %v", d, err)
+				log.Errorf("error creating node configuration directory %s: %v", d, err)
 				return err
 			}
 		}
@@ -199,6 +200,25 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 		log.Infof("node identity is %s", ipfs.GetIPFSNodeIdentity(pub).Pretty())
 		log.Infof("patr node configuration initialized at %s", filepath.Join(d, "node.json"))
 		return nil
+	case "run":
+		f := filepath.Join(filepath.Join(util.GetUserHomeDir(), ".patr"), "node.json")
+		if _, err := os.Stat(f); err != nil {
+			log.Errorf("could not find node configuration file %s", f)
+			return nil
+		}
+		c, err := os.ReadFile(f)
+		if err != nil {
+			log.Errorf("could not read data from node configuration file: %v", err)
+			return err
+		}
+		var config node.Config
+		if json.Unmarshal(c, &config) != nil {
+			log.Errorf("could not read JSON data from node configuration file: %v", err)
+			return err
+		}
+		ctx, _ := context.WithCancel(context.Background())
+		err = node.Run(ctx, config)
+		return err
 	default:
 		log.Errorf("Unknown node command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN NODE COMMAND: %s", c.Cmd)
