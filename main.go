@@ -8,28 +8,36 @@ import (
 	"github.com/alecthomas/kong"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/mbndr/figlet4go"
+	"github.com/multiformats/go-multibase"
 
 	"github.com/allisterb/patr/blockchain"
 	"github.com/allisterb/patr/did"
+	"github.com/allisterb/patr/feed"
+	"github.com/allisterb/patr/nostr"
 )
 
 type DidCmd struct {
-	Cmd       string `arg:"" name:"cmd" help:"Command to run. Can be one of: resolve, profile."`
+	Cmd       string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, profile."`
 	Name      string `arg:"" name:"name" help:"Get the DID linked to this name."`
 	ApiSecret string `arg:"" name:"api-secret" help:"The Infura API secret key to use."`
 }
 
-type InitUserCmd struct {
-	Name string `arg:"" name:"name" help:"Initialize the client for this name."`
+type NostrCmd struct {
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: gen-keys."`
+}
+
+type FeedCmd struct {
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: gen-keys."`
 }
 
 var log = logging.Logger("patr/main")
 
 // Command-line arguments
 var CLI struct {
-	Debug    bool        `help:"Enable debug mode."`
-	Did      DidCmd      `cmd:"" help:"Get the DID linked to this name."`
-	InitUser InitUserCmd `cmd:"" help:"Initialize the citizen5 server."`
+	Debug bool     `help:"Enable debug mode."`
+	Did   DidCmd   `cmd:"" help:"Run commands on the DID linked to a name."`
+	Nostr NostrCmd `cmd:"" help:"Run Nostr commands."`
+	Feed  FeedCmd  `cmd:"" help:"Run Patr feed commands."`
 }
 
 func init() {
@@ -77,14 +85,15 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 		r, err := blockchain.ResolveENS(d.ID.ID, c.ApiSecret)
 		if err == nil {
 			fmt.Printf("Address: %s\nContent-Hash: %s\nAvatar: %s\nPublic-Key: %s", r.Address, r.ContentHash, r.Avatar, r.Pubkey)
+			return nil
 		} else {
 			return err
 		}
 
 	default:
-		log.Errorf("Unknown command: %s", c.Cmd)
+		log.Errorf("Unknown did command: %s", c.Cmd)
+		return fmt.Errorf("UNKNOWN DID COMMAND: %s", c.Cmd)
 	}
-	return nil
 
 	//priv, pub := crypto.GenerateIdentity()
 	//clientConfig := models.Config{Pubkey: pub, PrivKey: priv}
@@ -99,7 +108,23 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 
 }
 
-func (c *InitUserCmd) Run(clictx *kong.Context) error {
+func (c *NostrCmd) Run(clictx *kong.Context) error {
+	switch strings.ToLower(c.Cmd) {
+	case "gen-keys":
+		log.Info("Generating Nostr secp256k1 key-pair...")
+		priv, pub, err := nostr.GenerateKeyPair()
+		if err != nil {
+			log.Errorf("Error generating Nostr secp256k1 key-pair: %v", err)
+			return err
+		} else {
+			log.Info("Generated Nostr secp256k1 key-pair.")
+			privs, _ := multibase.Encode(multibase.Base16, priv)
+			pubs, _ := multibase.Encode(multibase.Base16, pub)
+			fmt.Printf("Private key: %s (KEEP THIS SAFE AND NEVER SHARE IT)\nPublic key: %s", privs, pubs)
+			return nil
+		}
+
+	}
 	//priv, pub := crypto.GenerateIdentity()
 	//clientConfig := models.Config{Pubkey: pub, PrivKey: priv}
 	//data, _ := json.MarshalIndent(clientConfig, "", " ")
@@ -111,4 +136,25 @@ func (c *InitUserCmd) Run(clictx *kong.Context) error {
 	//log.Infof("client identity is %s.", crypto.GetIdentity(pub).Pretty())
 	//log.Infof("citizen5 client initialized.")
 	return nil
+}
+
+func (c *FeedCmd) Run(clictx *kong.Context) error {
+	switch strings.ToLower(c.Cmd) {
+	case "gen-keys":
+		log.Info("Generating IPNS RSA 2048-bit key-pair...")
+		priv, pub, err := feed.GenerateIPNSKeyPair()
+		if err != nil {
+			log.Errorf("Error generating IPNS RSA 2048-bit key-pair: %v", err)
+			return err
+		} else {
+			log.Errorf("Generated IPNS RSA 2048-bit key-pair.")
+			privs, _ := multibase.Encode(multibase.Base16, priv)
+			pubs, _ := multibase.Encode(multibase.Base16, pub)
+			fmt.Printf("Private key: %s (KEEP THIS SAFE AND NEVER SHARE IT)\nPublic key: %s", privs, pubs)
+			return nil
+		}
+	default:
+		log.Errorf("Unknown feed command: %s", c.Cmd)
+		return fmt.Errorf("UNKNOWN FEED COMMAND: %s", c.Cmd)
+	}
 }
