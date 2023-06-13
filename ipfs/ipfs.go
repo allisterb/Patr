@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 
 	iface "github.com/ipfs/boxo/coreiface"
+
 	logging "github.com/ipfs/go-log/v2"
 
 	ds "github.com/ipfs/go-datastore"
@@ -19,7 +21,73 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+type IPFSLinkStorage struct {
+	ipfs iface.CoreAPI
+}
+
 var log = logging.Logger("patr/ipfs")
+
+func (store *IPFSLinkStorage) IsInitialized() error {
+	if store.ipfs != nil {
+		return nil
+	} else {
+		return fmt.Errorf("IPFS link storage not initialized")
+	}
+}
+
+/*
+	"github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-block-service"
+	"github.com/ipfs/go-cid"
+	ifacePath "github.com/ipfs/boxo/coreiface/path"
+
+	func (store *IPFSLinkStorage) Has(ctx context.Context, cid cid.Cid) (bool, error) {
+		_, err := store.ipfs.Block().Get(ctx, ifacePath.IpldPath(cid))
+		return err != nil, err
+	}
+
+	func (store *IPFSLinkStorage) Put(ctx context.Context, block blocks.Block) error {
+		b, err := store.ipfs.Block().Put()
+
+}
+
+	func (store *IPFSLinkStorage) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Reader, error) {
+		return store.ipfs.Block().Get(lnkCtx.Ctx, ifacePath.New(lnk.Binary()))
+	}
+
+	func (store *IPFSLinkStorage) OpenWrite(lnkCtx linking.LinkContext) (io.Writer, linking.BlockWriteCommitter, error) {
+		//store.beInitialized()
+		buf := bytes.Buffer{}
+		return &buf, func(lnk datamodel.Link) error {
+			store.ipfs.Object().Put()
+			cl, ok := lnk.(Link)
+			if !ok {
+				return fmt.Errorf("incompatible link type: %T", lnk)
+			}
+
+			store.Bag[string(cl.Hash())] = buf.Bytes()
+			return nil
+		}, nil
+	}
+*/
+func GenerateIPNSKeyPair() ([]byte, []byte, error) {
+	priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
+	if err != nil {
+		log.Errorf("Error generating RSA 2048-bit keypair: %v", err)
+		return []byte{}, []byte{}, err
+	}
+	privkeyb, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		log.Errorf("Error marshalling RSA 2048-bit private key: %v", err)
+		return []byte{}, []byte{}, err
+	}
+	pubkeyb, err := crypto.MarshalPublicKey(pub)
+	if err != nil {
+		log.Errorf("Error marshalling RSA 2048-bit public key: %v", err)
+		return []byte{}, []byte{}, err
+	}
+	return privkeyb, pubkeyb, err
+}
 
 func GenerateIPFSNodeKeyPair() ([]byte, []byte, error) {
 	priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
@@ -96,11 +164,11 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (iface.Co
 	if e != nil {
 		return nil, nil, e
 	} else {
-		clean := func() {
+		shutdown := func() {
 			log.Infof("shutting down IPFS node %s...", node.Identity.Pretty())
 			node.Close()
 			log.Infof("IPFS node %s shutdown completed", node.Identity.Pretty())
 		}
-		return c, clean, e
+		return c, shutdown, e
 	}
 }

@@ -40,15 +40,21 @@ type NodeCmd struct {
 	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: init."`
 }
 
+type ProfileCmd struct {
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
+	Did string `arg:"" name:"name" help:"Use the DID linked to this name."`
+}
+
 var log = logging.Logger("patr/main")
 
 // Command-line arguments
 var CLI struct {
-	Debug bool     `help:"Enable debug mode."`
-	Did   DidCmd   `cmd:"" help:"Run commands on the DID linked to a name."`
-	Nostr NostrCmd `cmd:"" help:"Run Nostr commands."`
-	Feed  FeedCmd  `cmd:"" help:"Run Patr feed commands."`
-	Node  NodeCmd  `cmd:"" help:"Run Patr node commands."`
+	Debug   bool       `help:"Enable debug mode."`
+	Did     DidCmd     `cmd:"" help:"Run commands on the DID linked to a name."`
+	Nostr   NostrCmd   `cmd:"" help:"Run Nostr commands."`
+	Feed    FeedCmd    `cmd:"" help:"Run Patr feed commands."`
+	Node    NodeCmd    `cmd:"" help:"Run Patr node commands."`
+	Profile ProfileCmd `cmd:"" help:"Run Patr node commands."`
 }
 
 func init() {
@@ -153,7 +159,7 @@ func (c *FeedCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
 	case "gen-keys":
 		log.Info("Generating IPNS RSA 2048-bit key-pair...")
-		priv, pub, err := feed.GenerateIPNSKeyPair()
+		priv, pub, err := ipfs.GenerateIPNSKeyPair()
 		if err != nil {
 			log.Errorf("Error generating IPNS RSA 2048-bit key-pair: %v", err)
 			return err
@@ -223,5 +229,16 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 		log.Errorf("Unknown node command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN NODE COMMAND: %s", c.Cmd)
 	}
+}
 
+func (c *ProfileCmd) Run(clictx *kong.Context) error {
+	switch strings.ToLower(c.Cmd) {
+	case "create":
+		ctx, _ := context.WithCancel(context.Background())
+		feed.CreateProfile(ctx, feed.User{Did: "kk"})
+		return nil
+	default:
+		log.Errorf("Unknown profilee command: %s", c.Cmd)
+		return fmt.Errorf("UNKNOWN PROFILE COMMAND: %s", c.Cmd)
+	}
 }

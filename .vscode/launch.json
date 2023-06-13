@@ -10,8 +10,8 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["did", "resolve", "allisterb.eth", "${env:INFURA_PATR_KEY}"],
-            "env": {"CGO_ENABLED":"0"}
+            "args": ["profile", "create", "did:ens:allisterb.eth"],
+            "env": {"GOLOG_LOG_LEVEL":"debug"}
         }
     ]
 }
