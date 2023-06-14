@@ -18,9 +18,9 @@ type ENSName struct {
 
 var log = logging.Logger("patr/blockchain")
 
-func ResolveENS(name string, apiSecret string) (ENSName, error) {
+func ResolveENS(name string, apikey string) (ENSName, error) {
 	log.Infof("Resolving ENS name %v...", name)
-	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apiSecret))
+	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apikey))
 	if err != nil {
 		log.Errorf("Could not create Infura Ethereum API client: %v", err)
 		return ENSName{}, err

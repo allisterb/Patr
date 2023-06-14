@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["profile", "create", "did:ens:allisterb.eth", "${env:W3S_PATR_KEY}"],
+            "args": ["profile", "create", "did:ens:allisterb.eth"],
             "env": {"GOLOG_LOG_LEVEL":"debug"}
         }
     ]

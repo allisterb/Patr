@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 
-	path "github.com/ipfs/boxo/coreiface/path"
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
 	cbornode "github.com/ipfs/go-ipld-cbor"
@@ -51,31 +50,20 @@ func LoadUser(file string) (User, error) {
 	}
 	return user, nil
 }
-func CreateProfile(ctx context.Context, user User, w3stoken string) error {
+func CreateProfile(ctx context.Context, user User) error {
 	log.Infof("creating patr profile for %s...", user.Did)
-	c, err := node.LoadConfig()
-	if err != nil {
-		return err
-	}
-	ipfsNode, ipfsShutdown, err := ipfs.StartIPFSNode(ctx, c.PrivKey, c.Pubkey)
+	node.PanicIfNotInitialized()
+	ipfsNode, ipfsShutdown, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.PrivKey, node.CurrentConfig.Pubkey)
 	if err != nil {
 		return err
 	}
 	profile := Profile{Did: "foo"}
-
-	n2, err := cbornode.WrapObject(profile, mh.SHA2_256, -1)
-	log.Infof("cid: %v", n2.Cid())
-	err = ipfsNode.Dag().Pinning().Add(ctx, n2)
-	bb, err := ipfsNode.Dag().Get(ctx, n2.Cid())
-	s, i, err := ipfsNode.Pin().IsPinned(ctx, path.IpldPath(bb.Cid()))
-	log.Infof("%v is pinned %v %v", path.IpldPath(bb.Cid()), s, i)
-	if err != nil {
-		return err
-	}
 	n := bindnode.Wrap(&profile, nil)
 	var buf bytes.Buffer
 	err = dagjson.Encode(n, &buf)
 	if err != nil {
+		log.Errorf("error encoding DAG node for profile %v as DAG-JSON: %v", profile.Did, err)
+		ipfsShutdown()
 		return err
 	}
 	cidprefix := cid.Prefix{
@@ -85,15 +73,25 @@ func CreateProfile(ctx context.Context, user User, w3stoken string) error {
 		MhLength: 48,          // sha3-384 hash has a 48-byte sum.
 	}
 	xcid, err := cidprefix.Sum(buf.Bytes())
+	if err != nil {
+		log.Errorf("error creating CID for DAG node for profile %v as DAG-JSON: %v", profile.Did, err)
+		ipfsShutdown()
+		return err
+	}
 	blk, err := blocks.NewBlockWithCid(buf.Bytes(), xcid)
-	formatNd := ipldlegacy.LegacyNode{blk, n}
-	log.Infof("Block cid: %s", blk.Cid().String())
-	ipfsNode.Dag().Pinning().Add(ctx, &formatNd)
-
-	err = ipfs.PinIPFSBlockToW3S(ctx, ipfsNode, w3stoken, blk)
-
-	pcid, err := ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, w3stoken, blk)
-	log.Infof("Put block: %v", pcid)
+	if err != nil {
+		log.Errorf("error creating IPFS block for DAG node for profile %v as DAG-JSON: %v", profile.Did, err)
+		ipfsShutdown()
+		return err
+	}
+	log.Infof("IPFS block cid for DAG node for profile %s : %s", profile.Did, blk.Cid().String())
+	err = ipfsNode.Dag().Pinning().Add(ctx, &ipldlegacy.LegacyNode{blk, n})
+	if err != nil {
+		log.Errorf("error pinning IPFS block %v for DAG node for profile %v: %v", blk.Cid(), profile.Did, err)
+		ipfsShutdown()
+		return err
+	}
+	_, err = ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, node.CurrentConfig.W3SSecretKey, blk)
 
 	ipfsShutdown()
 	return err

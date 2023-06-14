@@ -213,14 +213,15 @@ func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken
 	var buf bytes.Buffer
 	err = w3s.WriteCar(ctx, ipfsNode.Dag(), []cid.Cid{block.Cid()}, &buf)
 	if err != nil {
-		log.Errorf("could not write block as CAR: %v", err)
+		log.Errorf("could not serialize block %v as CAR: %v", block.Cid(), err)
 		return cid.Cid{}, err
 	}
 	pcid, err := c.PutCar(ctx, &buf)
 	if err != nil {
-		log.Errorf("could not write block as CAR to W3S: %v", err)
+		log.Errorf("could not put block %v as CAR to W3S: %v", block.Cid(), err)
 		return cid.Cid{}, err
 	} else {
+		log.Infof("IPFS block %v pinned Web3.Storage pinning service at %v", block.Cid(), pcid)
 		return pcid, err
 	}
 }

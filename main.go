@@ -23,9 +23,8 @@ import (
 )
 
 type DidCmd struct {
-	Cmd       string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, profile."`
-	Name      string `arg:"" name:"name" help:"Get the DID linked to this name."`
-	ApiSecret string `arg:"" name:"api-secret" help:"The Infura API secret key to use."`
+	Cmd  string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, profile."`
+	Name string `arg:"" name:"name" help:"Get the DID linked to this name."`
 }
 
 type NostrCmd struct {
@@ -41,9 +40,8 @@ type NodeCmd struct {
 }
 
 type ProfileCmd struct {
-	Cmd       string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
-	Did       string `arg:"" name:"name" help:"Use the DID linked to this name."`
-	ApiSecret string `arg:"" name:"api-secret" help:"The Web3.Storage API secret key to use."`
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
+	Did string `arg:"" name:"name" help:"Use the DID linked to this name."`
 }
 
 var log = logging.Logger("patr/main")
@@ -100,7 +98,12 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 			log.Errorf("Only ENS DIDs are supported currently.")
 			return nil
 		}
-		r, err := blockchain.ResolveENS(d.ID.ID, c.ApiSecret)
+		config, err := node.LoadConfig()
+		if err != nil {
+			log.Error("could not load patr node config")
+			return err
+		}
+		r, err := blockchain.ResolveENS(d.ID.ID, config.InfuraSecretKey)
 		if err == nil {
 			fmt.Printf("Address: %s\nContent-Hash: %s\nAvatar: %s\nPublic-Key: %s", r.Address, r.ContentHash, r.Avatar, r.Pubkey)
 			return nil
@@ -206,6 +209,7 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 		}
 		log.Infof("node identity is %s", ipfs.GetIPFSNodeIdentity(pub).Pretty())
 		log.Infof("patr node configuration initialized at %s", filepath.Join(d, "node.json"))
+		log.Info("add your Infura and Web3.Storage API secret keys to this file to complete the configuration")
 		return nil
 	case "run":
 		f := filepath.Join(filepath.Join(util.GetUserHomeDir(), ".patr"), "node.json")
@@ -224,7 +228,7 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 			return err
 		}
 		ctx, _ := context.WithCancel(context.Background())
-		err = node.Run(ctx, config)
+		err = node.Run(ctx)
 		return err
 	default:
 		log.Errorf("Unknown node command: %s", c.Cmd)
@@ -235,8 +239,12 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 func (c *ProfileCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
 	case "create":
+		_, err := node.LoadConfig()
+		if err != nil {
+			return err
+		}
 		ctx, _ := context.WithCancel(context.Background())
-		feed.CreateProfile(ctx, feed.User{Did: "kk"}, c.ApiSecret)
+		feed.CreateProfile(ctx, feed.User{Did: "kk"})
 		return nil
 	default:
 		log.Errorf("Unknown profilee command: %s", c.Cmd)
