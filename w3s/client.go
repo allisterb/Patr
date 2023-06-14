@@ -3,6 +3,7 @@ package w3s
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/ipfs/go-cid"
@@ -19,7 +20,7 @@ const clientName = "web3.storage/go"
 type Client interface {
 	Get(context.Context, cid.Cid) (*Web3Response, error)
 	//Put(context.Context, fs.File, ...PutOption) (cid.Cid, error)
-	//PutCar(context.Context, io.Reader) (cid.Cid, error)
+	PutCar(context.Context, io.Reader) (cid.Cid, error)
 	Status(context.Context, cid.Cid) (*Status, error)
 	//List(context.Context, ...ListOption) (*UploadIterator, error)
 	Pin(context.Context, cid.Cid, ...PinOption) (*PinResponse, error)
@@ -32,7 +33,7 @@ type clientConfig struct {
 }
 
 type client struct {
-	cfg  *clientConfig
+	cfg *clientConfig
 }
 
 func (c *client) Get(ctx context.Context, cid cid.Cid) (*Web3Response, error) {

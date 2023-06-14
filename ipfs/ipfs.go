@@ -19,6 +19,10 @@ import (
 	repo "github.com/ipfs/kubo/repo"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	blocks "github.com/ipfs/go-block-format"
+
+	"github.com/allisterb/patr/w3s"
 )
 
 type IPFSLinkStorage struct {
@@ -134,6 +138,7 @@ func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo 
 		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
 		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
 		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+		"/ip4/149.56.89.144/tcp/4001/p2p/12D3KooWDiybBBYDvEEJQmNEp1yJeTgVr6mMgxqDrm9Gi8AKeNww",
 	}
 	c.Addresses.Swarm = []string{"/ip4/127.0.0.1/tcp/4001", "/ip4/127.0.0.1/udp/4001/quic"}
 	c.Identity.PeerID = pid.Pretty()
@@ -171,4 +176,28 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (iface.Co
 		}
 		return c, shutdown, e
 	}
+}
+
+func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string, block *blocks.BasicBlock) error {
+	c, err := w3s.NewClient(w3s.WithToken(authToken))
+	if err != nil {
+		log.Errorf("could not create W3S client: %v", err)
+		return err
+	}
+	l, err := ipfs.Swarm().LocalAddrs(ctx)
+	if err != nil {
+		log.Errorf("could not get IPFS node local addresses: %v", err)
+		return err
+	}
+	us := make([]w3s.PinOption, len(l))
+	for i := range l {
+		us[i] = w3s.WithPinOrigin(l[i].String())
+	}
+	r, err := c.Pin(ctx, block.Cid(), us[0])
+	if err != nil {
+		return err
+	}
+	log.Infof("%s", r.Status)
+	return err
+
 }

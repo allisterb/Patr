@@ -18,6 +18,7 @@ import (
 
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
+	"github.com/allisterb/patr/w3s"
 )
 
 type User struct {
@@ -85,10 +86,21 @@ func CreateProfile(ctx context.Context, user User) error {
 		MhType:   mh.SHA3_384, // 0x15 means "sha3-384" -- See the multicodecs table: https://github.com/multiformats/multicodec/
 		MhLength: 48,          // sha3-384 hash has a 48-byte sum.
 	}
-	cid, err := cidprefix.Sum(buf.Bytes())
-	blk, err := blocks.NewBlockWithCid(buf.Bytes(), cid)
+	xcid, err := cidprefix.Sum(buf.Bytes())
+	blk, err := blocks.NewBlockWithCid(buf.Bytes(), xcid)
 	formatNd := ipldlegacy.LegacyNode{blk, n}
+	log.Infof("Block cid: %s", blk.Cid().String())
 	ipfsNode.Dag().Pinning().Add(ctx, &formatNd)
+
+	ipfs.PinIPFSBlockToW3S(ctx, ipfsNode, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjoweDczOWNCMkMxMzM4ZjA3NDk4ODFmMjhDZGQ4NUM5NzJhNDVhYjhhRmYiLCJpc3MiOiJ3ZWIzLXN0b3JhZ2UiLCJpYXQiOjE2ODY3MDMyOTkzNjUsIm5hbWUiOiJwYXRyIn0.7i08wUHV7euYrOx2tLlsxs3hKF4y6-Cil6jKYt00-Ao", blk)
+
+	var buf2 bytes.Buffer
+
+	err = w3s.WriteCar(ctx, ipfsNode.Dag(), []cid.Cid{xcid}, &buf2)
+	if err != nil {
+		return err
+	}
+	log.Infof("CAR length %s", buf2.String())
 
 	//ipfsNode.Dag().Pinning().
 
