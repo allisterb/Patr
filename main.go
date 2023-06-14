@@ -41,8 +41,9 @@ type NodeCmd struct {
 }
 
 type ProfileCmd struct {
-	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
-	Did string `arg:"" name:"name" help:"Use the DID linked to this name."`
+	Cmd       string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
+	Did       string `arg:"" name:"name" help:"Use the DID linked to this name."`
+	ApiSecret string `arg:"" name:"api-secret" help:"The Web3.Storage API secret key to use."`
 }
 
 var log = logging.Logger("patr/main")
@@ -235,7 +236,7 @@ func (c *ProfileCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
 	case "create":
 		ctx, _ := context.WithCancel(context.Background())
-		feed.CreateProfile(ctx, feed.User{Did: "kk"})
+		feed.CreateProfile(ctx, feed.User{Did: "kk"}, c.ApiSecret)
 		return nil
 	default:
 		log.Errorf("Unknown profilee command: %s", c.Cmd)

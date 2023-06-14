@@ -18,7 +18,6 @@ import (
 
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
-	"github.com/allisterb/patr/w3s"
 )
 
 type User struct {
@@ -52,7 +51,7 @@ func LoadUser(file string) (User, error) {
 	}
 	return user, nil
 }
-func CreateProfile(ctx context.Context, user User) error {
+func CreateProfile(ctx context.Context, user User, w3stoken string) error {
 	log.Infof("creating patr profile for %s...", user.Did)
 	c, err := node.LoadConfig()
 	if err != nil {
@@ -69,7 +68,6 @@ func CreateProfile(ctx context.Context, user User) error {
 	err = ipfsNode.Dag().Pinning().Add(ctx, n2)
 	bb, err := ipfsNode.Dag().Get(ctx, n2.Cid())
 	s, i, err := ipfsNode.Pin().IsPinned(ctx, path.IpldPath(bb.Cid()))
-	//ipfsNode.Pin().
 	log.Infof("%v is pinned %v %v", path.IpldPath(bb.Cid()), s, i)
 	if err != nil {
 		return err
@@ -92,30 +90,10 @@ func CreateProfile(ctx context.Context, user User) error {
 	log.Infof("Block cid: %s", blk.Cid().String())
 	ipfsNode.Dag().Pinning().Add(ctx, &formatNd)
 
-	ipfs.PinIPFSBlockToW3S(ctx, ipfsNode, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjoweDczOWNCMkMxMzM4ZjA3NDk4ODFmMjhDZGQ4NUM5NzJhNDVhYjhhRmYiLCJpc3MiOiJ3ZWIzLXN0b3JhZ2UiLCJpYXQiOjE2ODY3MDMyOTkzNjUsIm5hbWUiOiJwYXRyIn0.7i08wUHV7euYrOx2tLlsxs3hKF4y6-Cil6jKYt00-Ao", blk)
+	err = ipfs.PinIPFSBlockToW3S(ctx, ipfsNode, w3stoken, blk)
 
-	var buf2 bytes.Buffer
-
-	err = w3s.WriteCar(ctx, ipfsNode.Dag(), []cid.Cid{xcid}, &buf2)
-	if err != nil {
-		return err
-	}
-	log.Infof("CAR length %s", buf2.String())
-
-	//ipfsNode.Dag().Pinning().
-
-	/*
-		n := bindnode.Wrap(profile, nil)
-		"github.com/ipld/go-ipld-prime/codec/dagjson"
-		cidlink "github.com/ipld/go-ipld-prime/linking/cid"
-		"github.com/ipld/go-ipld-prime/node/bindnode"
-		err = dagjson.Encode(n, &buf)
-		b, err := ipfsNode.Block().Put(ctx, &buf)
-		lnk := cidlink.Link{Cid: b.Path().Cid()}
-
-		lsys := cidlink.DefaultLinkSystem()
-		//lsys.SetReadStorage()
-	*/
+	pcid, err := ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, w3stoken, blk)
+	log.Infof("Put block: %v", pcid)
 
 	ipfsShutdown()
 	return err

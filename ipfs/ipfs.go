@@ -1,6 +1,7 @@
 package ipfs
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -21,6 +22,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-cid"
 
 	"github.com/allisterb/patr/w3s"
 )
@@ -200,4 +202,25 @@ func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string
 	log.Infof("%s", r.Status)
 	return err
 
+}
+
+func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken string, block *blocks.BasicBlock) (cid.Cid, error) {
+	c, err := w3s.NewClient(w3s.WithToken(authToken))
+	if err != nil {
+		log.Errorf("could not create W3S client: %v", err)
+		return cid.Cid{}, err
+	}
+	var buf bytes.Buffer
+	err = w3s.WriteCar(ctx, ipfsNode.Dag(), []cid.Cid{block.Cid()}, &buf)
+	if err != nil {
+		log.Errorf("could not write block as CAR: %v", err)
+		return cid.Cid{}, err
+	}
+	pcid, err := c.PutCar(ctx, &buf)
+	if err != nil {
+		log.Errorf("could not write block as CAR to W3S: %v", err)
+		return cid.Cid{}, err
+	} else {
+		return pcid, err
+	}
 }
