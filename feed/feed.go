@@ -1,13 +1,19 @@
 package feed
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 
 	path "github.com/ipfs/boxo/coreiface/path"
+	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-cid"
 	cbornode "github.com/ipfs/go-ipld-cbor"
+	ipldlegacy "github.com/ipfs/go-ipld-legacy"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/ipld/go-ipld-prime/codec/dagjson"
+	"github.com/ipld/go-ipld-prime/node/bindnode"
 	mh "github.com/multiformats/go-multihash"
 
 	"github.com/allisterb/patr/ipfs"
@@ -55,18 +61,35 @@ func CreateProfile(ctx context.Context, user User) error {
 	if err != nil {
 		return err
 	}
-	profile := Profile{Did: user.Did}
+	profile := Profile{Did: "foo"}
 
 	n2, err := cbornode.WrapObject(profile, mh.SHA2_256, -1)
 	log.Infof("cid: %v", n2.Cid())
 	err = ipfsNode.Dag().Pinning().Add(ctx, n2)
 	bb, err := ipfsNode.Dag().Get(ctx, n2.Cid())
 	s, i, err := ipfsNode.Pin().IsPinned(ctx, path.IpldPath(bb.Cid()))
-	ipfsNode.Pin().
-		log.Infof("%v is pinned %v %v", path.IpldPath(bb.Cid()), s, i)
+	//ipfsNode.Pin().
+	log.Infof("%v is pinned %v %v", path.IpldPath(bb.Cid()), s, i)
 	if err != nil {
 		return err
 	}
+	n := bindnode.Wrap(&profile, nil)
+	var buf bytes.Buffer
+	err = dagjson.Encode(n, &buf)
+	if err != nil {
+		return err
+	}
+	cidprefix := cid.Prefix{
+		Version:  1, // Usually '1'.
+		Codec:    cid.DagJSON,
+		MhType:   mh.SHA3_384, // 0x15 means "sha3-384" -- See the multicodecs table: https://github.com/multiformats/multicodec/
+		MhLength: 48,          // sha3-384 hash has a 48-byte sum.
+	}
+	cid, err := cidprefix.Sum(buf.Bytes())
+	blk, err := blocks.NewBlockWithCid(buf.Bytes(), cid)
+	formatNd := ipldlegacy.LegacyNode{blk, n}
+	ipfsNode.Dag().Pinning().Add(ctx, &formatNd)
+
 	//ipfsNode.Dag().Pinning().
 
 	/*
