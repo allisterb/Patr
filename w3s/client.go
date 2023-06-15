@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	ipns_pb "github.com/ipfs/boxo/ipns/pb"
 	"github.com/ipfs/go-cid"
 )
 
@@ -24,7 +25,7 @@ type Client interface {
 	Status(context.Context, cid.Cid) (*Status, error)
 	//List(context.Context, ...ListOption) (*UploadIterator, error)
 	Pin(context.Context, cid.Cid, ...PinOption) (*PinResponse, error)
-	GetName(context.Context, string) (cid.Cid, error)
+	GetName(context.Context, string) (*ipns_pb.IpnsEntry, error)
 }
 
 type clientConfig struct {

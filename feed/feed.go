@@ -104,7 +104,8 @@ func CreateProfile(ctx context.Context, user User) error {
 		return err
 	}
 
-	ipfs.GetIPNSRecordFromW3S(ctx, node.CurrentConfig.W3SSecretKey, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
+	c, err := ipfs.GetIPNSRecordFromW3S(ctx, node.CurrentConfig.W3SSecretKey, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
+	log.Infof("%v", c)
 
 	ipfsShutdown()
 	return err

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	iface "github.com/ipfs/boxo/coreiface"
+	path "github.com/ipfs/boxo/coreiface/path"
 
 	logging "github.com/ipfs/go-log/v2"
 
@@ -234,5 +235,24 @@ func GetIPNSRecordFromW3S(ctx context.Context, authToken string, name string) (c
 		log.Errorf("could not create W3S client: %v", err)
 		return cid.Cid{}, err
 	}
-	return c.GetName(ctx, name)
+
+	r, err := c.GetName(ctx, name)
+
+	v := string(r.GetValue())
+	p := path.New(v)
+	log.Infof("IPNS name points to path %v", p)
+	return cid.Undef, err
 }
+
+/*
+func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, ipfsNode iface.CoreAPI, cid cid.Cid, privkey []byte, did string) {
+	//ipfsNode.
+	ipfsNode.Name().Publish(ctx, path.IpldPath(cid), options.Name.Key())
+	sk, err := crypto.UnmarshalPrivateKey(privkey)
+	//ipfsNode.Name().(ctx, path.IpldPath(cid), options.Name.Key())
+	ipnsRecord, err := ipns.Create(sk, cid.Bytes(), 0, time.Now().Add(1*time.Hour))
+	//ipnsRecord.
+	//ipnsRecord.
+
+}
+*/
