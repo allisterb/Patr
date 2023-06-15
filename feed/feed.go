@@ -15,6 +15,7 @@ import (
 	"github.com/ipld/go-ipld-prime/node/bindnode"
 	mh "github.com/multiformats/go-multihash"
 
+	"github.com/allisterb/patr/blockchain"
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
 )
@@ -53,14 +54,19 @@ func LoadUser(file string) (User, error) {
 func CreateProfile(ctx context.Context, user User) error {
 	log.Infof("creating patr profile for %s...", user.Did)
 	node.PanicIfNotInitialized()
+	_, err := blockchain.ResolveENS(user.Did, node.CurrentConfig.InfuraSecretKey)
+	if err != nil {
+		log.Errorf("could not resolve ENS name %s", user.Did)
+		return err
+	}
 	ipfsNode, ipfsShutdown, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.PrivKey, node.CurrentConfig.Pubkey)
 	if err != nil {
 		return err
 	}
-	profile := Profile{Did: "foo"}
-	n := bindnode.Wrap(&profile, nil)
+	profile := Profile{Did: user.Did}
+	dagnode := bindnode.Wrap(&profile, nil)
 	var buf bytes.Buffer
-	err = dagjson.Encode(n, &buf)
+	err = dagjson.Encode(dagnode, &buf)
 	if err != nil {
 		log.Errorf("error encoding DAG node for profile %v as DAG-JSON: %v", profile.Did, err)
 		ipfsShutdown()
@@ -84,9 +90,10 @@ func CreateProfile(ctx context.Context, user User) error {
 		ipfsShutdown()
 		return err
 	}
-	log.Infof("IPFS block cid for DAG node for profile %s : %s", profile.Did, blk.Cid().String())
-	err = ipfsNode.Dag().Pinning().Add(ctx, &ipldlegacy.LegacyNode{blk, n})
+	log.Infof("IPFS block cid for DAG node for profile %s : %s", profile.Did, blk.Cid())
+	err = ipfsNode.Dag().Pinning().Add(ctx, &ipldlegacy.LegacyNode{blk, dagnode})
 	if err != nil {
+
 		log.Errorf("error pinning IPFS block %v for DAG node for profile %v: %v", blk.Cid(), profile.Did, err)
 		ipfsShutdown()
 		return err

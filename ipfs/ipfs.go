@@ -198,10 +198,10 @@ func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string
 	r, err := c.Pin(ctx, block.Cid(), us[0])
 	if err != nil {
 		return err
+	} else {
+		log.Infof("IPFS block %v pinned using Web3.Storage pinning service at %v", block.Cid(), r.Pin.Cid)
+		return err
 	}
-	log.Infof("%s", r.Status)
-	return err
-
 }
 
 func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken string, block *blocks.BasicBlock) (cid.Cid, error) {
@@ -221,7 +221,9 @@ func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken
 		log.Errorf("could not put block %v as CAR to W3S: %v", block.Cid(), err)
 		return cid.Cid{}, err
 	} else {
-		log.Infof("IPFS block %v pinned Web3.Storage pinning service at %v", block.Cid(), pcid)
+		x := pcid.Bytes()
+		log.Infof("IPFS block %v pinned using Web3.Storage pinning service at %v", block.Cid(), x)
+
 		return pcid, err
 	}
 }

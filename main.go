@@ -23,7 +23,7 @@ import (
 )
 
 type DidCmd struct {
-	Cmd  string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, profile."`
+	Cmd  string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, init-user, profile."`
 	Name string `arg:"" name:"name" help:"Get the DID linked to this name."`
 }
 
@@ -40,15 +40,15 @@ type NodeCmd struct {
 }
 
 type ProfileCmd struct {
-	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
-	Did string `arg:"" name:"name" help:"Use the DID linked to this name."`
+	Cmd      string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
+	Did      string `arg:"" name:"name" help:"Use the DID linked to this name."`
+	UserFile string `arg:"" name:"name" help:"Load user configuration from this file."`
 }
 
 var log = logging.Logger("patr/main")
 
 // Command-line arguments
 var CLI struct {
-	Debug   bool       `help:"Enable debug mode."`
 	Did     DidCmd     `cmd:"" help:"Run commands on the DID linked to a name."`
 	Nostr   NostrCmd   `cmd:"" help:"Run Nostr commands."`
 	Feed    FeedCmd    `cmd:"" help:"Run Patr feed commands."`
@@ -105,7 +105,7 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 		}
 		r, err := blockchain.ResolveENS(d.ID.ID, config.InfuraSecretKey)
 		if err == nil {
-			fmt.Printf("Address: %s\nContent-Hash: %s\nAvatar: %s\nPublic-Key: %s", r.Address, r.ContentHash, r.Avatar, r.Pubkey)
+			fmt.Printf("ETH Address: %s\nNostr Public-Key: %v\nIPNS Public-Key: %s\nContent-Hash: %s\nAvatar: %s", r.Address, r.NostrPubKey, r.IPNSPubKey, r.ContentHash, r.Avatar)
 			return nil
 		} else {
 			return err
@@ -115,18 +115,6 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 		log.Errorf("Unknown did command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN DID COMMAND: %s", c.Cmd)
 	}
-
-	//priv, pub := crypto.GenerateIdentity()
-	//clientConfig := models.Config{Pubkey: pub, PrivKey: priv}
-	//data, _ := json.MarshalIndent(clientConfig, "", " ")
-	//err := ioutil.WriteFile(filepath.Join(util.GetUserHomeDir(), ".citizen5", "client.json"), data, 0644)
-	//if err != nil {
-	//	log.Errorf("error creating client configuration file: %v", err)
-	//	return nil
-	//}
-	//log.Infof("client identity is %s.", crypto.GetIdentity(pub).Pretty())
-	//log.Infof("citizen5 client initialized.")
-
 }
 
 func (c *NostrCmd) Run(clictx *kong.Context) error {
@@ -139,23 +127,13 @@ func (c *NostrCmd) Run(clictx *kong.Context) error {
 			return err
 		} else {
 			log.Info("Generated Nostr secp256k1 key-pair.")
-			privs, _ := multibase.Encode(multibase.Base16, priv)
-			pubs, _ := multibase.Encode(multibase.Base16, pub)
+			privs, _ := multibase.Encode(multibase.Base58BTC, priv)
+			pubs, _ := multibase.Encode(multibase.Base58BTC, pub)
 			fmt.Printf("Private key: %s (KEEP THIS SAFE AND NEVER SHARE IT)\nPublic key: %s", privs, pubs)
 			return nil
 		}
 
 	}
-	//priv, pub := crypto.GenerateIdentity()
-	//clientConfig := models.Config{Pubkey: pub, PrivKey: priv}
-	//data, _ := json.MarshalIndent(clientConfig, "", " ")
-	//err := ioutil.WriteFile(filepath.Join(util.GetUserHomeDir(), ".citizen5", "client.json"), data, 0644)
-	//if err != nil {
-	//	log.Errorf("error creating client configuration file: %v", err)
-	//	return nil
-	//}
-	//log.Infof("client identity is %s.", crypto.GetIdentity(pub).Pretty())
-	//log.Infof("citizen5 client initialized.")
 	return nil
 }
 
@@ -238,16 +216,59 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 
 func (c *ProfileCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
+	case "init-user":
+		d, err := did.Parse(c.Did)
+		if err != nil {
+			log.Errorf("Could not parse DID %s: %v", c.Did, err)
+			return err
+		}
+		if d.ID.Method != "ens" {
+			log.Errorf("invalid DID: %s. Only ENS DIDs are supported currently", c.Did)
+			return fmt.Errorf("INVALID DID: %s. ONLY ENS DIDS ARE SUPPORTED CURRENTLY", c.Did)
+		}
+		if _, err := os.Stat(c.UserFile); err == nil {
+			log.Errorf("user configuration file %s already exists", c.UserFile)
+			return fmt.Errorf("USER CONFIGURATION FILE %s ALREADY EXISTS", c.UserFile)
+		}
+		nsk, npk, err := nostr.GenerateKeyPair()
+		if err != nil {
+			log.Errorf("Could not generate Nostr keypair for %s: %v", c.Did, err)
+			return err
+		}
+		isk, ipk, err := ipfs.GenerateIPNSKeyPair()
+		if err != nil {
+			log.Errorf("Could not generate IPNS keypair for %s: %v", c.Did, err)
+			return err
+		}
+		user := feed.User{
+			Did:          c.Did,
+			NostrPrivKey: nsk,
+			NostrPubkey:  npk,
+			IPNSPrivKey:  isk,
+			IPNSPubKey:   ipk,
+		}
+		data, _ := json.MarshalIndent(user, "", " ")
+		err = os.WriteFile(c.UserFile, data, 0644)
+		if err != nil {
+			log.Errorf("error creating patr user configuration file: %v", err)
+			return err
+		} else {
+			log.Infof("created patr user configuration file for %s at %s", c.Did, c.UserFile)
+			snpub, _ := multibase.Encode(multibase.Base58BTC, user.NostrPubkey)
+			sipub, _ := multibase.Encode(multibase.Base58BTC, user.IPNSPubKey)
+			fmt.Printf("Nostr secp256k1 public key (nostrKey): %s\nIPNS rsa-2048 public key (ipnsKey): %s", snpub, sipub)
+			return nil
+		}
 	case "create":
 		_, err := node.LoadConfig()
 		if err != nil {
 			return err
 		}
 		ctx, _ := context.WithCancel(context.Background())
-		feed.CreateProfile(ctx, feed.User{Did: "kk"})
+		feed.CreateProfile(ctx, feed.User{Did: "allisterb.eth"})
 		return nil
 	default:
-		log.Errorf("Unknown profilee command: %s", c.Cmd)
+		log.Errorf("Unknown profile command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN PROFILE COMMAND: %s", c.Cmd)
 	}
 }

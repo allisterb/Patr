@@ -1,62 +1,77 @@
 package blockchain
 
 import (
-	"encoding/hex"
 	"fmt"
 
+	"encoding/binary"
+
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	ens "github.com/wealdtech/go-ens/v3"
 )
 
 type ENSName struct {
 	Address     string
-	ContentHash string
+	IPNSPubKey  string
+	NostrPubKey string
+	ContentHash cid.Cid
 	Avatar      string
-	Pubkey      string
 }
 
 var log = logging.Logger("patr/blockchain")
 
 func ResolveENS(name string, apikey string) (ENSName, error) {
-	log.Infof("Resolving ENS name %v...", name)
+	log.Infof("resolving ENS name %v...", name)
 	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apikey))
 	if err != nil {
-		log.Errorf("Could not create Infura Ethereum API client: %v", err)
+		log.Errorf("could not create Infura Ethereum API client: %v", err)
 		return ENSName{}, err
 	}
 	r, err := ens.NewResolver(client, name)
 	if err != nil {
-		log.Errorf("Could not create resolver ENS name %s: %v", name, err)
+		log.Errorf("could not create resolver ENS name %s: %v", name, err)
 		return ENSName{}, err
 	}
 	address, err := r.Address()
 	if err != nil {
-		log.Errorf("Could not resolve address for ENS name %s: %v", name, err)
+		log.Errorf("could not resolve address for ENS name %s: %v", name, err)
 		return ENSName{}, err
 	}
 	chash, err := r.Contenthash()
 	if err != nil {
-		log.Errorf("Could not resolve content hash record for ENS name %s: %v", name, err)
+		log.Errorf("could not resolve content hash record for ENS name %s: %v", name, err)
 		return ENSName{}, err
+	}
+	chashcid := cid.Cid{}
+	if chash != nil && binary.Size(chash) > 0 && chash[0] == 0xe3 {
+		//_, str, err := multibase.Decode(chash[1:])
+		_, chashcid, err = cid.CidFromBytes(chash[2:])
+		if err != nil {
+			log.Errorf("could not decode IPFS content hash as CID: %v", err)
+		}
 	}
 	avatar, err := r.Text("avatar")
 	if err != nil {
-		log.Warnf("Could not resolve avatar text record for ENS name %s: %v", name, err)
+		log.Warnf("could not resolve avatar text record for ENS name %s: %v", name, err)
 	}
-	pk1, _, err := r.PubKey()
+	ipnsKey, err := r.Text("ipnsKey")
 	if err != nil {
-		log.Errorf("Could not resolve public key for ENS name %s: %v", name, err)
-		return ENSName{}, err
+		log.Warnf("could not resolve ipnsKey text record for ENS name %s: %v", name, err)
+	}
+	nostrKey, err := r.Text("nostrKey")
+	if err != nil {
+		log.Warnf("could not resolve nostrKey text record for ENS name %s: %v", name, err)
 	}
 
 	log.Infof("Resolved ENS name %v", name)
 
 	record := ENSName{
 		Address:     address.Hex(),
-		ContentHash: string(chash),
+		IPNSPubKey:  ipnsKey,
+		NostrPubKey: nostrKey,
+		ContentHash: chashcid,
 		Avatar:      avatar,
-		Pubkey:      hex.EncodeToString(pk1[:]),
 	}
 
 	return record, err
