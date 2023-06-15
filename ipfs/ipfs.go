@@ -227,3 +227,12 @@ func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken
 		return pcid, err
 	}
 }
+
+func GetIPNSRecordFromW3S(ctx context.Context, authToken string, name string) (cid.Cid, error) {
+	c, err := w3s.NewClient(w3s.WithToken(authToken))
+	if err != nil {
+		log.Errorf("could not create W3S client: %v", err)
+		return cid.Cid{}, err
+	}
+	return c.GetName(ctx, name)
+}

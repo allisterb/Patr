@@ -99,6 +99,12 @@ func CreateProfile(ctx context.Context, user User) error {
 		return err
 	}
 	_, err = ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, node.CurrentConfig.W3SSecretKey, blk)
+	if err != nil {
+		log.Errorf("could not pin IPFS block %v using Web3.Storage service")
+		return err
+	}
+
+	ipfs.GetIPNSRecordFromW3S(ctx, node.CurrentConfig.W3SSecretKey, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
 
 	ipfsShutdown()
 	return err

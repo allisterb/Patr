@@ -24,6 +24,7 @@ type Client interface {
 	Status(context.Context, cid.Cid) (*Status, error)
 	//List(context.Context, ...ListOption) (*UploadIterator, error)
 	Pin(context.Context, cid.Cid, ...PinOption) (*PinResponse, error)
+	GetName(context.Context, string) (cid.Cid, error)
 }
 
 type clientConfig struct {
