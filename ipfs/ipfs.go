@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	iface "github.com/ipfs/boxo/coreiface"
-	path "github.com/ipfs/boxo/coreiface/path"
+	path "github.com/ipfs/boxo/path"
 
 	logging "github.com/ipfs/go-log/v2"
 
@@ -222,8 +222,7 @@ func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken
 		log.Errorf("could not put block %v as CAR to W3S: %v", block.Cid(), err)
 		return cid.Cid{}, err
 	} else {
-		x := pcid.Bytes()
-		log.Infof("IPFS block %v pinned using Web3.Storage pinning service at %v", block.Cid(), x)
+		log.Infof("IPFS block %v pinned using Web3.Storage pinning service at %v", block.Cid(), pcid)
 
 		return pcid, err
 	}
@@ -235,13 +234,18 @@ func GetIPNSRecordFromW3S(ctx context.Context, authToken string, name string) (c
 		log.Errorf("could not create W3S client: %v", err)
 		return cid.Cid{}, err
 	}
-
 	r, err := c.GetName(ctx, name)
-
+	if err != nil {
+		log.Errorf("could not lookup name %s on Web3.Storage: %v", name, err)
+	}
+	if r == nil {
+		log.Infof("name %s does not exist on Web3.Storage", name)
+		return cid.Undef, err
+	}
 	v := string(r.GetValue())
-	p := path.New(v)
+	p := path.FromString(v)
 	log.Infof("IPNS name points to path %v", p)
-	return cid.Undef, err
+	return cid.Parse(p.Segments()[1])
 }
 
 /*

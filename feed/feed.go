@@ -105,7 +105,7 @@ func CreateProfile(ctx context.Context, user User) error {
 	}
 
 	c, err := ipfs.GetIPNSRecordFromW3S(ctx, node.CurrentConfig.W3SSecretKey, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
-	log.Infof("%v", c)
+	log.Infof("IPNS name points to CID %v", c)
 
 	ipfsShutdown()
 	return err
