@@ -41,8 +41,8 @@ type NodeCmd struct {
 
 type ProfileCmd struct {
 	Cmd      string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
-	Did      string `arg:"" name:"name" help:"Use the DID linked to this name."`
-	UserFile string `arg:"" name:"name" help:"Load user configuration from this file."`
+	Did      string `arg:"" name:"did" help:"Use the DID linked to this name."`
+	UserFile string `arg:"" optional:"" name:"file" help:"Load user configuration from this file."`
 }
 
 var log = logging.Logger("patr/main")
@@ -260,12 +260,16 @@ func (c *ProfileCmd) Run(clictx *kong.Context) error {
 			return nil
 		}
 	case "create":
-		_, err := node.LoadConfig()
+		user, err := feed.LoadUser(c.UserFile)
+		if err != nil {
+			return err
+		}
+		_, err = node.LoadConfig()
 		if err != nil {
 			return err
 		}
 		ctx, _ := context.WithCancel(context.Background())
-		feed.CreateProfile(ctx, feed.User{Did: "allisterb.eth"})
+		feed.CreateProfile(ctx, user)
 		return nil
 	default:
 		log.Errorf("Unknown profile command: %s", c.Cmd)

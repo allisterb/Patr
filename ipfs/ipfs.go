@@ -6,9 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"time"
 
 	iface "github.com/ipfs/boxo/coreiface"
+	ipfspath "github.com/ipfs/boxo/coreiface/path"
+	ipns "github.com/ipfs/boxo/ipns"
 	path "github.com/ipfs/boxo/path"
+	"github.com/multiformats/go-multibase"
 
 	logging "github.com/ipfs/go-log/v2"
 
@@ -132,6 +136,20 @@ func GetIPFSNodeIdentity(pubb []byte) peer.ID {
 	return id
 }
 
+func GetIPNSPublicKeyName(pubb []byte) (string, error) {
+	pub, err := crypto.UnmarshalPublicKey(pubb)
+	if err != nil {
+		log.Errorf("could not unmarshal IPNS public key: %v", err)
+		return "", err
+	}
+	pid, err := peer.IDFromPublicKey(pub)
+	if err != nil {
+		log.Errorf("could not get peer ID public key: %v", err)
+		return "", err
+	}
+	return peer.ToCid(pid).StringOfBase(multibase.Base36)
+}
+
 func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo {
 	pid := GetIPFSNodeIdentity(pubkey)
 	c := cfg.Config{}
@@ -248,15 +266,57 @@ func GetIPNSRecordFromW3S(ctx context.Context, authToken string, name string) (c
 	return cid.Parse(p.Segments()[1])
 }
 
-/*
-func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, ipfsNode iface.CoreAPI, cid cid.Cid, privkey []byte, did string) {
-	//ipfsNode.
-	ipfsNode.Name().Publish(ctx, path.IpldPath(cid), options.Name.Key())
+func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid cid.Cid, privkey []byte, pubkey []byte) error {
+	name, err := GetIPNSPublicKeyName(pubkey)
+	if err != nil {
+		return err
+	}
+	p := ipfspath.IpldPath(cid).String()
+	log.Infof("publishing DAG node %v at path %s to IPNS name %s using Web3.Storage...", cid, p, name)
+	c, err := w3s.NewClient(w3s.WithToken(authToken))
+	if err != nil {
+		log.Errorf("could not create W3S client: %v", err)
+		return err
+	}
 	sk, err := crypto.UnmarshalPrivateKey(privkey)
-	//ipfsNode.Name().(ctx, path.IpldPath(cid), options.Name.Key())
-	ipnsRecord, err := ipns.Create(sk, cid.Bytes(), 0, time.Now().Add(1*time.Hour))
-	//ipnsRecord.
-	//ipnsRecord.
+	if err != nil {
+		log.Errorf("could not unmarshal IPNS private key: %v", err)
+		return err
+	}
+	var seq uint64 = 1
+	r, err := c.GetName(ctx, p)
+	if r != nil && err == nil {
+		seq = r.GetSequence() + 1
+	}
+	nr, err := ipns.Create(sk, []byte(p), seq, time.Now().Add(time.Hour*48), 0)
+	if err != nil {
+		log.Errorf("could not create new IPNS record for path %v: %v", p, err)
+		return err
+	}
+	pk, err := crypto.UnmarshalPublicKey(pubkey)
+	if err != nil {
+		log.Errorf("could not unmarshal IPNS public key: %v", err)
+		return err
+	}
+	if err = ipns.EmbedPublicKey(pk, nr); err != nil {
+		log.Errorf("could not embed IPNS public key in record: %v", err)
+		return err
+	}
 
+	err = c.PutName(ctx, nr, name)
+	if err == nil {
+		log.Infof("published DAG node %v at path %s to IPNS name %s using Web3.Storage", cid, p, name)
+	} else {
+		log.Errorf("could not publishe DAG node %v at path %s to IPNS name %s using Web3.Storage: %v", cid, p, name, err)
+	}
+
+	return err
+	//r, err := c.GetName(ctx)
+	//ipfsNode.
+	//ipfsNode.Name().Publish(ctx, path.IpldPath(cid), options.Name.Key())
+	//sk, err := crypto.UnmarshalPrivateKey(privkey)
+	//ipfsNode.Name().(ctx, path.IpldPath(cid), options.Name.Key())
+	//ipnsRecord, err := ipns.Create(sk, cid.Bytes(), 0, time.Now().Add(1*time.Hour))
+	//ipnsRecord.
+	//ipnsRecord.
 }
-*/

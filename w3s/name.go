@@ -5,20 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
-	//ipns "github.com/ipfs/boxo/ipns"
 	ipns_pb "github.com/ipfs/boxo/ipns/pb"
-	"github.com/ipfs/go-cid"
 )
-
-type IPNSRecordData struct {
-	key      string
-	record   string
-	hasV2Sig bool
-	seqno    string
-	validity string
-}
 
 func (c *client) GetName(ctx context.Context, name string) (*ipns_pb.IpnsEntry, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/name/%s", "https://name.web3.storage", name), nil)
@@ -32,10 +24,10 @@ func (c *client) GetName(ctx context.Context, name string) (*ipns_pb.IpnsEntry, 
 		return nil, err
 	}
 
-	if res.StatusCode == 404 {
+	if res.StatusCode == 400 || res.StatusCode == 404 {
 		return nil, err
 	} else if res.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected response status: %d", res.StatusCode)
+		return nil, fmt.Errorf("HTTP response status: %s", res.Status)
 	}
 
 	d := json.NewDecoder(res.Body)
@@ -48,6 +40,9 @@ func (c *client) GetName(ctx context.Context, name string) (*ipns_pb.IpnsEntry, 
 		return nil, err
 	}
 	ll, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(out.Record)
+	if err != nil {
+		return nil, err
+	}
 
 	n := ipns_pb.IpnsEntry{}
 
@@ -56,19 +51,30 @@ func (c *client) GetName(ctx context.Context, name string) (*ipns_pb.IpnsEntry, 
 	return &n, err
 }
 
-func (c *client) PublishName(ctx context.Context, name string) (cid.Cid, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/name/%s", "https://name.web3.storage", name), nil)
+func (c *client) PutName(ctx context.Context, record *ipns_pb.IpnsEntry, name string) error {
+	b, err := record.Marshal()
 	if err != nil {
-		return cid.Undef, err
+		return err
+	}
+	s := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString(b)
+
+	//w.Write(b)
+	//w.Close()
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/name/%s", "https://name.web3.storage", name), strings.NewReader(s))
+	if err != nil {
+		return err
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.cfg.token))
 	req.Header.Add("X-Client", clientName)
+
 	res, err := c.cfg.hc.Do(req)
 	if err != nil {
-		return cid.Undef, err
+		return err
 	}
 	if res.StatusCode != 200 {
-		return cid.Undef, fmt.Errorf("unexpected response status: %d", res.StatusCode)
+		//var b bytes.Buffer
+		b, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("HTTP response status: %s %s", res.Status, string(b))
 	}
 	d := json.NewDecoder(res.Body)
 	var out struct {
@@ -77,8 +83,7 @@ func (c *client) PublishName(ctx context.Context, name string) (cid.Cid, error) 
 	}
 	err = d.Decode(&out)
 	if err != nil {
-		return cid.Undef, err
+		return err
 	}
-	//_, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(out.Record)
-	return cid.Parse(out.Value)
+	return err
 }

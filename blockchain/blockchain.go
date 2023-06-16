@@ -64,7 +64,7 @@ func ResolveENS(name string, apikey string) (ENSName, error) {
 		log.Warnf("could not resolve nostrKey text record for ENS name %s: %v", name, err)
 	}
 
-	log.Infof("Resolved ENS name %v", name)
+	log.Infof("resolved ENS name %v", name)
 
 	record := ENSName{
 		Address:     address.Hex(),

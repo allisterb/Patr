@@ -26,6 +26,7 @@ type Client interface {
 	//List(context.Context, ...ListOption) (*UploadIterator, error)
 	Pin(context.Context, cid.Cid, ...PinOption) (*PinResponse, error)
 	GetName(context.Context, string) (*ipns_pb.IpnsEntry, error)
+	PutName(context.Context, *ipns_pb.IpnsEntry, string) error
 }
 
 type clientConfig struct {

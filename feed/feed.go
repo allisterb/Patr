@@ -16,6 +16,7 @@ import (
 	mh "github.com/multiformats/go-multihash"
 
 	"github.com/allisterb/patr/blockchain"
+	"github.com/allisterb/patr/did"
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
 )
@@ -39,6 +40,11 @@ func init() {
 }
 
 func LoadUser(file string) (User, error) {
+	_, err := os.Stat(file)
+	if err != nil {
+		log.Errorf("user file %v does not exist", err)
+		return User{}, err
+	}
 	u, err := os.ReadFile(file)
 	if err != nil {
 		log.Errorf("could not read user file: %v", err)
@@ -52,9 +58,14 @@ func LoadUser(file string) (User, error) {
 	return user, nil
 }
 func CreateProfile(ctx context.Context, user User) error {
+	d, err := did.Parse(user.Did)
+	if err != nil {
+		log.Errorf("could not parse DID %s: %v", user.Did, err)
+		return err
+	}
 	log.Infof("creating patr profile for %s...", user.Did)
 	node.PanicIfNotInitialized()
-	_, err := blockchain.ResolveENS(user.Did, node.CurrentConfig.InfuraSecretKey)
+	_, err = blockchain.ResolveENS(d.ID.ID, node.CurrentConfig.InfuraSecretKey)
 	if err != nil {
 		log.Errorf("could not resolve ENS name %s", user.Did)
 		return err
@@ -101,12 +112,10 @@ func CreateProfile(ctx context.Context, user User) error {
 	_, err = ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, node.CurrentConfig.W3SSecretKey, blk)
 	if err != nil {
 		log.Errorf("could not pin IPFS block %v using Web3.Storage service")
+		ipfsShutdown()
 		return err
 	}
-
-	c, err := ipfs.GetIPNSRecordFromW3S(ctx, node.CurrentConfig.W3SSecretKey, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
-	log.Infof("IPNS name points to CID %v", c)
-
+	err = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), user.IPNSPrivKey, user.IPNSPubKey)
 	ipfsShutdown()
 	return err
 }
