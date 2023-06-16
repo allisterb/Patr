@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["profile", "create", "did:ens:allisterb.eth", "allisterb.eth.json"],
+            "args": ["feed", "create"],
             "env": {"GOLOG_LOG_LEVEL":"debug"}
         }
     ]

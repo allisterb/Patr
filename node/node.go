@@ -21,6 +21,7 @@ type Config struct {
 	IPFSPrivKey     []byte
 	InfuraSecretKey string
 	W3SSecretKey    string
+	IPNSKeys        map[byte]byte
 }
 
 var log = logging.Logger("patr/node")

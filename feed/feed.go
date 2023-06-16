@@ -109,6 +109,7 @@ func CreateProfile(ctx context.Context) error {
 		ipfsShutdown()
 		return err
 	}
+	ipfs.PublishIPNSRecordForDAGNode(ctx, ipfsNode, blk.Cid())
 	_, err = ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, node.CurrentConfig.W3SSecretKey, blk)
 	if err != nil {
 		log.Errorf("could not pin IPFS block %v using Web3.Storage service")

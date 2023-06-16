@@ -199,6 +199,12 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (iface.Co
 	}
 }
 
+func PublishIPNSRecordForDAGNode(ctx context.Context, ipfs iface.CoreAPI, cid cid.Cid) {
+	k, _ := ipfs.Key().Self(ctx)
+	log.Infof("Key is %v", k.Path())
+	//r, err := ipfs.Name().Publish(ctx, ipfspath.IpldPath(cid).String())
+
+}
 func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string, block *blocks.BasicBlock) error {
 	c, err := w3s.NewClient(w3s.WithToken(authToken))
 	if err != nil {
@@ -271,6 +277,8 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 	if err != nil {
 		return err
 	}
+
+	//PublishIPNSRecordForDAGNode()
 	p := ipfspath.IpldPath(cid).String()
 	log.Infof("publishing DAG node %v at path %s to IPNS name %s using Web3.Storage...", cid, p, name)
 	c, err := w3s.NewClient(w3s.WithToken(authToken))
@@ -303,7 +311,7 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 		return err
 	}
 
-	err = c.PutName(ctx, nr, name)
+	err = c.PutName(ctx, nr, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
 	if err == nil {
 		log.Infof("published DAG node %v at path %s to IPNS name %s using Web3.Storage", cid, p, name)
 	} else {
