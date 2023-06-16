@@ -14,8 +14,11 @@ import (
 )
 
 type Config struct {
-	Pubkey          []byte
-	PrivKey         []byte
+	Did             string
+	NostrPrivKey    []byte
+	NostrPubKey     []byte
+	IPFSPubKey      []byte
+	IPFSPrivKey     []byte
 	InfuraSecretKey string
 	W3SSecretKey    string
 }
@@ -46,16 +49,20 @@ func LoadConfig() (Config, error) {
 		log.Errorf("could not read JSON data from node configuration file: %v", err)
 		return Config{}, err
 	}
-	if config.PrivKey == nil || config.Pubkey == nil {
+	if config.NostrPrivKey == nil || config.NostrPubKey == nil {
+		log.Errorf("Nostr private or public key not set in configuration file")
+		return Config{}, fmt.Errorf("NOSTR PRIVATE OR PUBLIC KEY NOT SET IN CONFIGURATION FILE")
+	}
+	if config.IPFSPrivKey == nil || config.IPFSPubKey == nil {
 		log.Errorf("IPFS node private or public key not set in configuration file")
 		return Config{}, fmt.Errorf("IPFS NODE PRIVATE OR PUBLIC KEY NOT SET IN CONFIGURATION FILE")
 	}
 	if config.InfuraSecretKey == "" {
-		log.Errorf("Infura API secret key not set in configuration file")
+		log.Warnf("Infura API secret key not set in configuration file")
 		return Config{}, fmt.Errorf("INFURA API SECRET KEY NOT SET IN CONFIGURATION FILE")
 	}
 	if config.W3SSecretKey == "" {
-		log.Errorf("Web3.Storage API secret key not set in configuration file")
+		log.Warnf("Web3.Storage API secret key not set in configuration file")
 		return Config{}, fmt.Errorf("WEB3.STORAGE API SECRET KEY NOT SET IN CONFIGURATION FILE")
 	}
 	CurrentConfig = config
@@ -66,7 +73,7 @@ func LoadConfig() (Config, error) {
 func Run(ctx context.Context) error {
 	PanicIfNotInitialized()
 	log.Info("starting patr node...")
-	_, ipfsStop, err := ipfs.StartIPFSNode(ctx, CurrentConfig.PrivKey, CurrentConfig.Pubkey)
+	_, ipfsStop, err := ipfs.StartIPFSNode(ctx, CurrentConfig.IPFSPrivKey, CurrentConfig.IPFSPubKey)
 	if err != nil {
 		log.Errorf("error starting IPFS node: %v", err)
 		return err

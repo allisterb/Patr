@@ -57,24 +57,24 @@ func LoadUser(file string) (User, error) {
 	}
 	return user, nil
 }
-func CreateProfile(ctx context.Context, user User) error {
-	d, err := did.Parse(user.Did)
+func CreateProfile(ctx context.Context) error {
+	d, err := did.Parse(node.CurrentConfig.Did)
 	if err != nil {
-		log.Errorf("could not parse DID %s: %v", user.Did, err)
+		log.Errorf("could not parse DID %s: %v", node.CurrentConfig.Did, err)
 		return err
 	}
-	log.Infof("creating patr profile for %s...", user.Did)
+	log.Infof("creating patr profile for %s...", node.CurrentConfig.Did)
 	node.PanicIfNotInitialized()
 	_, err = blockchain.ResolveENS(d.ID.ID, node.CurrentConfig.InfuraSecretKey)
 	if err != nil {
-		log.Errorf("could not resolve ENS name %s", user.Did)
+		log.Errorf("could not resolve ENS name %s", node.CurrentConfig.Did)
 		return err
 	}
-	ipfsNode, ipfsShutdown, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.PrivKey, node.CurrentConfig.Pubkey)
+	ipfsNode, ipfsShutdown, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
 	if err != nil {
 		return err
 	}
-	profile := Profile{Did: user.Did}
+	profile := Profile{Did: node.CurrentConfig.Did}
 	dagnode := bindnode.Wrap(&profile, nil)
 	var buf bytes.Buffer
 	err = dagjson.Encode(dagnode, &buf)
@@ -115,7 +115,7 @@ func CreateProfile(ctx context.Context, user User) error {
 		ipfsShutdown()
 		return err
 	}
-	err = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), user.IPNSPrivKey, user.IPNSPubKey)
+	err = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
 	ipfsShutdown()
 	return err
 }

@@ -22,6 +22,9 @@ type ENSName struct {
 var log = logging.Logger("patr/blockchain")
 
 func ResolveENS(name string, apikey string) (ENSName, error) {
+	if apikey == "" {
+		return ENSName{}, fmt.Errorf("The Infura API secret key is not set in the node configuration")
+	}
 	log.Infof("resolving ENS name %v...", name)
 	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apikey))
 	if err != nil {
