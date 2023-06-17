@@ -213,6 +213,18 @@ func (c *FeedCmd) Run(clictx *kong.Context) error {
 
 func (c *NostrCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
+	case "create-event":
+		_, err := node.LoadConfig()
+		if err != nil {
+			return err
+		}
+		ctx, _ := context.WithCancel(context.Background())
+		ipfscore, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
+		ipfscore.W3S.SetAuthToken(node.CurrentConfig.W3SSecretKey)
+		if err != nil {
+			return err
+		}
+		return nostr.CreateTestEvent(node.CurrentConfig.NostrPrivKey, "test event", *ipfscore)
 	default:
 		log.Errorf("Unknown nostr command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN NOSTR COMMAND: %s", c.Cmd)

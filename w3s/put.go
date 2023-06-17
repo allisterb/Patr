@@ -24,7 +24,7 @@ func (c *client) PutCar(ctx context.Context, r io.Reader) (cid.Cid, error) {
 	}
 	if res.StatusCode != 200 {
 		b, _ := io.ReadAll(res.Body)
-		return cid.Undef, fmt.Errorf("error putting CAR data to Web3.Storage: %v %v", res.Status, b)
+		return cid.Undef, fmt.Errorf("error putting CAR data to Web3.Storage: %v %v", res.Status, string(b))
 	}
 	d := json.NewDecoder(res.Body)
 	var out struct {

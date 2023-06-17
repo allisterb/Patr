@@ -71,7 +71,7 @@ func (r *Relay) OnInitialized(s *relayer.Server) {
 	log.Info("patr relay initialized")
 }
 
-func CreateTestEvent(privkey string, text string) (nostr.Event, error) {
+func CreateTestEvent(privkey string, text string, ipfscore ipfs.IPFSCore) error {
 	e := nostr.Event{
 		ID:        "0",
 		Content:   text,
@@ -80,12 +80,19 @@ func CreateTestEvent(privkey string, text string) (nostr.Event, error) {
 	}
 	err := e.Sign(privkey)
 	if err != nil {
-		return nostr.Event{}, err
+		log.Errorf("could not sign test event: %v", err)
+		return err
 	}
 	sc, err := e.CheckSignature()
-	if sc && err == nil {
-		return nostr.Event{}, nil
+	if (!sc) || err != nil {
+		return fmt.Errorf("signing test event failed")
+	}
+
+	l, err := ipfs.PutNostrEventAsIPLDLink(ipfscore.Ctx, ipfscore, e)
+	if err != nil {
+		return fmt.Errorf("could not create test event %v with text %s: %v", e.ID, e.Content, err)
 	} else {
-		return nostr.Event{}, fmt.Errorf("signing test event failed")
+		log.Infof("created event %v with text %s at IPLD node %v", e.ID, e.Content, l.String())
+		return nil
 	}
 }

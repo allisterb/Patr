@@ -23,7 +23,6 @@ import (
 	"github.com/allisterb/patr/did"
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
-	"github.com/allisterb/patr/nostr"
 )
 
 type Feed struct {
@@ -108,8 +107,6 @@ func CreateFeed(ctx context.Context) error {
 		return err
 	}
 	_ = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
-	e, err := nostr.CreateTestEvent(node.CurrentConfig.NostrPrivKey, "jj")
-	_, err = ipfs.PutNostrEventAsIPLDLink(ctx, *ipfscore, e)
 	ipfscore.Shutdown()
 	return err
 }
