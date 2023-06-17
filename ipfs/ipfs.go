@@ -10,6 +10,7 @@ import (
 	"time"
 
 	iface "github.com/ipfs/boxo/coreiface"
+
 	ipfspath "github.com/ipfs/boxo/coreiface/path"
 	ipns "github.com/ipfs/boxo/ipns"
 	path "github.com/ipfs/boxo/path"
@@ -329,9 +330,19 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCor
 	}
 }
 
-func PublishIPNSRecordForDAGNode(ctx context.Context, ipfs iface.CoreAPI, cid cid.Cid) {
-	k, _ := ipfs.Key().Self(ctx)
-	log.Infof("Key is %v", k.Path())
+func PublishIPNSRecordForDAGNode(ctx context.Context, ipfscore IPFSCore, authtoken string, cid cid.Cid, keyname string, privkey []byte, pubkey []byte) error {
+	p := ipfspath.IpldPath(cid)
+	//_, err := ipfscore.Node.Repo.Keystore().
+	//if err != nil {
+	//	return fmt.Errorf("could not get key %s from IPFS node keystore: %v", keyname, err)
+	//}
+	r, err := ipfscore.Api.Name().Publish(ctx, p)
+	if err != nil {
+		return fmt.Errorf("error publishing IPNS record for %v using IPFS node key %s: %v", p, keyname, err)
+	} else {
+		log.Infof("created IPNS record on DHT for path %v", r.Value())
+		return err
+	}
 }
 
 func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string, block *blocks.BasicBlock) error {
@@ -407,7 +418,7 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 		return err
 	}
 
-	p := ipfspath.IpldPath(cid).String()
+	p := ipfspath.IpfsPath(cid).String()
 	log.Infof("publishing DAG node %v at path %s to IPNS name %s using Web3.Storage...", cid, p, name)
 	c, err := w3s.NewClient(w3s.WithToken(authToken))
 	if err != nil {
@@ -424,6 +435,7 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 	if r != nil && err == nil {
 		seq = r.GetSequence() + 1
 	}
+
 	nr, err := ipns.Create(sk, []byte(p), seq, time.Now().Add(time.Hour*48), 0)
 	if err != nil {
 		log.Errorf("could not create new IPNS record for path %v: %v", p, err)

@@ -92,7 +92,7 @@ func CreateTestEvent(privkey string, text string, ipfscore ipfs.IPFSCore) error 
 	if err != nil {
 		return fmt.Errorf("could not create test event %v with text %s: %v", e.ID, e.Content, err)
 	} else {
-		log.Infof("created event %v with text %s at IPLD node %v", e.ID, e.Content, l.String())
+		log.Infof("created event %v with text %s at https://ipfs.io/ipfs/%v", e.ID, e.Content, l.String())
 		return nil
 	}
 }

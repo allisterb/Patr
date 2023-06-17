@@ -99,7 +99,7 @@ func CreateFeed(ctx context.Context) error {
 		ipfscore.Shutdown()
 		return err
 	}
-	ipfs.PublishIPNSRecordForDAGNode(ctx, ipfscore.Api, blk.Cid())
+
 	_, err = ipfs.PinIPLDBlockToW3S(ctx, ipfscore.Api, node.CurrentConfig.W3SSecretKey, blk)
 	if err != nil {
 		log.Errorf("could not pin IPFS block %v using Web3.Storage service")
@@ -107,6 +107,7 @@ func CreateFeed(ctx context.Context) error {
 		return err
 	}
 	_ = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
+	err = ipfs.PublishIPNSRecordForDAGNode(ctx, *ipfscore, node.CurrentConfig.W3SSecretKey, blk.Cid(), "user", node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
 	ipfscore.Shutdown()
 	return err
 }
