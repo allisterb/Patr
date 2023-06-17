@@ -201,7 +201,7 @@ func (c *FeedCmd) Run(clictx *kong.Context) error {
 			return err
 		}
 		ctx, _ := context.WithCancel(context.Background())
-		feed.CreateProfile(ctx)
+		feed.CreateFeed(ctx)
 		return nil
 
 	default:

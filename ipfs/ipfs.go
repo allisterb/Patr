@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"time"
 
 	iface "github.com/ipfs/boxo/coreiface"
@@ -16,6 +17,7 @@ import (
 
 	logging "github.com/ipfs/go-log/v2"
 
+	blocks "github.com/ipfs/go-block-format"
 	ds "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
 	cfg "github.com/ipfs/kubo/config"
@@ -26,61 +28,111 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
+	"github.com/ipld/go-ipld-prime/datamodel"
+	"github.com/ipld/go-ipld-prime/fluent/qp"
+	"github.com/ipld/go-ipld-prime/linking"
+	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
+	"github.com/ipld/go-ipld-prime/node/basicnode"
+	mh "github.com/multiformats/go-multihash"
+
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/allisterb/patr/w3s"
 )
+
+type IPFSCore struct {
+	Api  iface.CoreAPI
+	Node ipfsCore.IpfsNode
+	LS   linking.LinkSystem
+}
 
 type IPFSLinkStorage struct {
 	ipfs iface.CoreAPI
 }
 
+type IPFSLinkWriter struct {
+	ctx  context.Context
+	ipfs iface.CoreAPI
+	cid  cid.Cid
+	data bytes.Buffer
+}
+
 var log = logging.Logger("patr/ipfs")
 
-func (store *IPFSLinkStorage) IsInitialized() error {
-	if store.ipfs != nil {
-		return nil
-	} else {
-		return fmt.Errorf("IPFS link storage not initialized")
-	}
+func (w *IPFSLinkWriter) Write(d []byte) (int, error) {
+	return w.data.Read(d)
 }
 
-/*
-	"github.com/ipfs/go-block-format"
-	"github.com/ipfs/go-block-service"
-	"github.com/ipfs/go-cid"
-	ifacePath "github.com/ipfs/boxo/coreiface/path"
-
-	func (store *IPFSLinkStorage) Has(ctx context.Context, cid cid.Cid) (bool, error) {
-		_, err := store.ipfs.Block().Get(ctx, ifacePath.IpldPath(cid))
-		return err != nil, err
+func (w *IPFSLinkWriter) BlockWriteCommit(lnk datamodel.Link) error {
+	b, err := blocks.NewBlockWithCid(w.data.Bytes(), w.cid)
+	if err != nil {
+		return err
 	}
-
-	func (store *IPFSLinkStorage) Put(ctx context.Context, block blocks.Block) error {
-		b, err := store.ipfs.Block().Put()
-
+	_, err = w.ipfs.Block().Put(w.ctx, bytes.NewReader(b.RawData()))
+	return err
 }
 
-	func (store *IPFSLinkStorage) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Reader, error) {
-		return store.ipfs.Block().Get(lnkCtx.Ctx, ifacePath.New(lnk.Binary()))
+func (store *IPFSLinkStorage) Has(ctx context.Context, key string) (bool, error) {
+	_, cid, err := cid.CidFromBytes([]byte(key))
+	if err != nil {
+		log.Errorf("could not create CID from key string %s: %v", key, err)
+		return false, err
 	}
+	_, err = store.ipfs.Block().Stat(ctx, ipfspath.IpldPath(cid))
+	return err != nil, err
+}
 
-	func (store *IPFSLinkStorage) OpenWrite(lnkCtx linking.LinkContext) (io.Writer, linking.BlockWriteCommitter, error) {
-		//store.beInitialized()
-		buf := bytes.Buffer{}
-		return &buf, func(lnk datamodel.Link) error {
-			store.ipfs.Object().Put()
-			cl, ok := lnk.(Link)
-			if !ok {
-				return fmt.Errorf("incompatible link type: %T", lnk)
-			}
-
-			store.Bag[string(cl.Hash())] = buf.Bytes()
-			return nil
-		}, nil
+func (store *IPFSLinkStorage) Get(ctx context.Context, key string) ([]byte, error) {
+	_, k, err := cid.CidFromBytes([]byte(key))
+	if err != nil {
+		log.Errorf("could not create CID from key string %s: %v", key, err)
+		return []byte{}, err
 	}
-*/
+	r, err := store.ipfs.Block().Get(ctx, ipfspath.IpldPath(k))
+	if err != nil {
+		log.Errorf("could not get CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
+		return []byte{}, err
+	}
+	return io.ReadAll(r)
+}
+
+func (store *IPFSLinkStorage) Put(ctx context.Context, key string, data []byte) error {
+	_, k, err := cid.CidFromBytes([]byte(key))
+	if err != nil {
+		log.Errorf("could not create CID from key string %s: %v", key, err)
+		return err
+	}
+	b, _ := blocks.NewBlockWithCid(data, k)
+	r := bytes.NewReader(b.RawData())
+	_, err = store.ipfs.Block().Put(ctx, r)
+	return err
+}
+
+func (store *IPFSLinkStorage) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Reader, error) {
+	_, k, err := cid.CidFromBytes([]byte(lnk.Binary()))
+	if err != nil {
+		log.Errorf("could not create CID from key string %s: %v", lnk.Binary(), err)
+		return nil, err
+	}
+	return store.ipfs.Block().Get(lnkCtx.Ctx, ipfspath.IpldPath(k))
+}
+
+func (store *IPFSLinkStorage) OpenWrite(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Writer, linking.BlockWriteCommitter, error) {
+	_, k, err := cid.CidFromBytes([]byte(lnk.Binary()))
+	if err != nil {
+		log.Errorf("could not create CID from key string %s: %v", lnk.Binary(), err)
+		return nil, nil, err
+	}
+	lw := IPFSLinkWriter{
+		ctx:  lnkCtx.Ctx,
+		ipfs: store.ipfs,
+		cid:  k,
+	}
+	return &lw, lw.BlockWriteCommit, nil
+}
+
+// func
 func GenerateIPNSKeyPair() ([]byte, []byte, error) {
 	priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
 	if err != nil {
@@ -171,7 +223,7 @@ func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo 
 	}
 }
 
-func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (iface.CoreAPI, func(), error) {
+func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*ipfsCore.IpfsNode, iface.CoreAPI, func(), error) {
 	log.Infof("starting IPFS node %s...", GetIPFSNodeIdentity(pubkey).Pretty())
 	node, err := ipfsCore.NewNode(ctx, &ipfsCore.BuildCfg{
 		Online:  true,
@@ -183,19 +235,19 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (iface.Co
 	})
 	if err != nil {
 		log.Errorf("error staring IPFS node %s: %v", GetIPFSNodeIdentity(pubkey).Pretty(), err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	log.Infof("IPFS node %s started", node.Identity.Pretty())
 	c, e := coreapi.NewCoreAPI(node)
 	if e != nil {
-		return nil, nil, e
+		return nil, nil, nil, e
 	} else {
 		shutdown := func() {
 			log.Infof("shutting down IPFS node %s...", node.Identity.Pretty())
 			node.Close()
 			log.Infof("IPFS node %s shutdown completed", node.Identity.Pretty())
 		}
-		return c, shutdown, e
+		return node, c, shutdown, e
 	}
 }
 
@@ -278,7 +330,6 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 		return err
 	}
 
-	//PublishIPNSRecordForDAGNode()
 	p := ipfspath.IpldPath(cid).String()
 	log.Infof("publishing DAG node %v at path %s to IPNS name %s using Web3.Storage...", cid, p, name)
 	c, err := w3s.NewClient(w3s.WithToken(authToken))
@@ -327,4 +378,32 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 	//ipnsRecord, err := ipns.Create(sk, cid.Bytes(), 0, time.Now().Add(1*time.Hour))
 	//ipnsRecord.
 	//ipnsRecord.
+}
+
+func PutNostrEventAsIPLDLink(ctx context.Context, ipfs IPFSCore, evt nostr.Event) (datamodel.Link, error) {
+	dagnode, err := qp.BuildMap(basicnode.Prototype.Any, 4, func(ma datamodel.MapAssembler) {
+		qp.MapEntry(ma, "id", qp.String(evt.ID))
+		qp.MapEntry(ma, "pubkey", qp.String(evt.PubKey))
+		qp.MapEntry(ma, "created_at", qp.String(evt.CreatedAt.Time().String()))
+		qp.MapEntry(ma, "kind", qp.Int(int64(evt.Kind)))
+		qp.MapEntry(ma, "tags", qp.Map(int64(len(evt.Tags)), func(ma datamodel.MapAssembler) {
+			for _, t := range evt.Tags {
+				qp.MapEntry(ma, t.Key(), qp.String(t.Value()))
+			}
+		}))
+		qp.MapEntry(ma, "content", qp.String(evt.Content))
+		qp.MapEntry(ma, "sig", qp.String(evt.Sig))
+		//PutIPFSDAGBlockToW3S(ctx, ipfscore.Api, )
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not create IPLD node from Nostr event %s: %v", evt.ID, err)
+	}
+	lp := cidlink.LinkPrototype{
+		Prefix: cid.Prefix{
+			Version:  1,           // Usually '1'.
+			Codec:    cid.DagJSON, // 0x71 means "dag-cbor" -- See the multicodecs table: https://github.com/multiformats/multicodec/
+			MhType:   mh.SHA3_384, // 0x20 means "sha2-512" -- See the multicodecs table: https://github.com/multiformats/multicodec/
+			MhLength: 48,          // sha2-512 hash has a 64-byte sum.
+		}}
+	return ipfs.LS.Store(linking.LinkContext{}, lp, dagnode)
 }

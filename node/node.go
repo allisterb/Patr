@@ -74,7 +74,7 @@ func LoadConfig() (Config, error) {
 func Run(ctx context.Context) error {
 	PanicIfNotInitialized()
 	log.Info("starting patr node...")
-	_, ipfsStop, err := ipfs.StartIPFSNode(ctx, CurrentConfig.IPFSPrivKey, CurrentConfig.IPFSPubKey)
+	_, _, ipfsStop, err := ipfs.StartIPFSNode(ctx, CurrentConfig.IPFSPrivKey, CurrentConfig.IPFSPubKey)
 	if err != nil {
 		log.Errorf("error starting IPFS node: %v", err)
 		return err
