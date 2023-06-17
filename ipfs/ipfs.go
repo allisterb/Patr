@@ -42,13 +42,11 @@ import (
 )
 
 type IPFSCore struct {
-	Api  iface.CoreAPI
-	Node ipfsCore.IpfsNode
-	LS   linking.LinkSystem
-}
-
-type IPFSLinkStorage struct {
-	ipfs iface.CoreAPI
+	Ctx      context.Context
+	Api      iface.CoreAPI
+	Node     ipfsCore.IpfsNode
+	Shutdown func()
+	LS       linking.LinkSystem
 }
 
 type IPFSLinkWriter struct {
@@ -73,23 +71,23 @@ func (w *IPFSLinkWriter) BlockWriteCommit(lnk datamodel.Link) error {
 	return err
 }
 
-func (store *IPFSLinkStorage) Has(ctx context.Context, key string) (bool, error) {
+func (store *IPFSCore) Has(ctx context.Context, key string) (bool, error) {
 	_, cid, err := cid.CidFromBytes([]byte(key))
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
 		return false, err
 	}
-	_, err = store.ipfs.Block().Stat(ctx, ipfspath.IpldPath(cid))
+	_, err = store.Api.Block().Stat(ctx, ipfspath.IpldPath(cid))
 	return err != nil, err
 }
 
-func (store *IPFSLinkStorage) Get(ctx context.Context, key string) ([]byte, error) {
+func (store *IPFSCore) Get(ctx context.Context, key string) ([]byte, error) {
 	_, k, err := cid.CidFromBytes([]byte(key))
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
 		return []byte{}, err
 	}
-	r, err := store.ipfs.Block().Get(ctx, ipfspath.IpldPath(k))
+	r, err := store.Api.Block().Get(ctx, ipfspath.IpldPath(k))
 	if err != nil {
 		log.Errorf("could not get CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
 		return []byte{}, err
@@ -97,7 +95,7 @@ func (store *IPFSLinkStorage) Get(ctx context.Context, key string) ([]byte, erro
 	return io.ReadAll(r)
 }
 
-func (store *IPFSLinkStorage) Put(ctx context.Context, key string, data []byte) error {
+func (store *IPFSCore) Put(ctx context.Context, key string, data []byte) error {
 	_, k, err := cid.CidFromBytes([]byte(key))
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
@@ -105,20 +103,20 @@ func (store *IPFSLinkStorage) Put(ctx context.Context, key string, data []byte) 
 	}
 	b, _ := blocks.NewBlockWithCid(data, k)
 	r := bytes.NewReader(b.RawData())
-	_, err = store.ipfs.Block().Put(ctx, r)
+	_, err = store.Api.Block().Put(ctx, r)
 	return err
 }
 
-func (store *IPFSLinkStorage) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Reader, error) {
+func (store *IPFSCore) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Reader, error) {
 	_, k, err := cid.CidFromBytes([]byte(lnk.Binary()))
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", lnk.Binary(), err)
 		return nil, err
 	}
-	return store.ipfs.Block().Get(lnkCtx.Ctx, ipfspath.IpldPath(k))
+	return store.Api.Block().Get(lnkCtx.Ctx, ipfspath.IpldPath(k))
 }
 
-func (store *IPFSLinkStorage) OpenWrite(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Writer, linking.BlockWriteCommitter, error) {
+func (store *IPFSCore) OpenWrite(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Writer, linking.BlockWriteCommitter, error) {
 	_, k, err := cid.CidFromBytes([]byte(lnk.Binary()))
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", lnk.Binary(), err)
@@ -126,7 +124,7 @@ func (store *IPFSLinkStorage) OpenWrite(lnkCtx linking.LinkContext, lnk datamode
 	}
 	lw := IPFSLinkWriter{
 		ctx:  lnkCtx.Ctx,
-		ipfs: store.ipfs,
+		ipfs: store.Api,
 		cid:  k,
 	}
 	return &lw, lw.BlockWriteCommit, nil
@@ -223,7 +221,7 @@ func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo 
 	}
 }
 
-func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*ipfsCore.IpfsNode, iface.CoreAPI, func(), error) {
+func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCore, error) {
 	log.Infof("starting IPFS node %s...", GetIPFSNodeIdentity(pubkey).Pretty())
 	node, err := ipfsCore.NewNode(ctx, &ipfsCore.BuildCfg{
 		Online:  true,
@@ -235,28 +233,37 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*ipfsCor
 	})
 	if err != nil {
 		log.Errorf("error staring IPFS node %s: %v", GetIPFSNodeIdentity(pubkey).Pretty(), err)
-		return nil, nil, nil, err
+		return nil, err
 	}
 	log.Infof("IPFS node %s started", node.Identity.Pretty())
 	c, e := coreapi.NewCoreAPI(node)
 	if e != nil {
-		return nil, nil, nil, e
+		return nil, e
 	} else {
 		shutdown := func() {
 			log.Infof("shutting down IPFS node %s...", node.Identity.Pretty())
 			node.Close()
 			log.Infof("IPFS node %s shutdown completed", node.Identity.Pretty())
 		}
-		return node, c, shutdown, e
+		core := IPFSCore{
+			Ctx:      ctx,
+			Api:      c,
+			Node:     *node,
+			Shutdown: shutdown,
+		}
+		lsys := cidlink.DefaultLinkSystem()
+		lsys.SetReadStorage(&core)
+		lsys.SetWriteStorage(&core)
+		core.LS = lsys
+		return &core, e
 	}
 }
 
 func PublishIPNSRecordForDAGNode(ctx context.Context, ipfs iface.CoreAPI, cid cid.Cid) {
 	k, _ := ipfs.Key().Self(ctx)
 	log.Infof("Key is %v", k.Path())
-	//r, err := ipfs.Name().Publish(ctx, ipfspath.IpldPath(cid).String())
-
 }
+
 func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string, block *blocks.BasicBlock) error {
 	c, err := w3s.NewClient(w3s.WithToken(authToken))
 	if err != nil {

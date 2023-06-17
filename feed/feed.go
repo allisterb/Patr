@@ -3,6 +3,7 @@ package feed
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
@@ -49,12 +50,11 @@ func CreateFeed(ctx context.Context) error {
 		log.Errorf("could not resolve ENS name %s", node.CurrentConfig.Did)
 		return err
 	}
-	_, ipfsNode, ipfsShutdown, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
+	ipfscore, err := ipfs.StartIPFSNode(ctx, node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
 	if err != nil {
 		return err
 	}
 	feed := Feed{Did: node.CurrentConfig.Did}
-	//dagnode := bindnode.Wrap(&feed, nil)
 	dagnode, err := qp.BuildMap(basicnode.Prototype.Any, 4, func(ma datamodel.MapAssembler) {
 		qp.MapEntry(ma, "Did", qp.String(feed.Did))
 		qp.MapEntry(ma, "Events", qp.Map(100, func(ma datamodel.MapAssembler) {
@@ -63,11 +63,14 @@ func CreateFeed(ctx context.Context) error {
 			}
 		}))
 	})
+	if err != nil {
+		return fmt.Errorf("error creating IPLD node from feed for %s: %v", feed.Did, err)
+	}
 	var buf bytes.Buffer
 	err = dagjson.Encode(dagnode, &buf)
 	if err != nil {
 		log.Errorf("error encoding DAG node for feed %v as DAG-JSON: %v", feed.Did, err)
-		ipfsShutdown()
+		ipfscore.Shutdown()
 		return err
 	}
 	cidprefix := cid.Prefix{
@@ -79,44 +82,39 @@ func CreateFeed(ctx context.Context) error {
 	xcid, err := cidprefix.Sum(buf.Bytes())
 	if err != nil {
 		log.Errorf("error creating CID for DAG node for feed %v as DAG-JSON: %v", feed.Did, err)
-		ipfsShutdown()
+		ipfscore.Shutdown()
 		return err
 	}
 	blk, err := blocks.NewBlockWithCid(buf.Bytes(), xcid)
 	if err != nil {
 		log.Errorf("error creating IPFS block for DAG node for feed %v as DAG-JSON: %v", feed.Did, err)
-		ipfsShutdown()
+		ipfscore.Shutdown()
 		return err
 	}
 	log.Infof("IPFS block cid for DAG node for feed %s : %s", feed.Did, blk.Cid())
-	err = ipfsNode.Dag().Pinning().Add(ctx, &ipldlegacy.LegacyNode{blk, dagnode})
+	err = ipfscore.Api.Dag().Pinning().Add(ctx, &ipldlegacy.LegacyNode{blk, dagnode})
 	if err != nil {
 
 		log.Errorf("error pinning IPFS block %v for DAG node for feed %v: %v", blk.Cid(), feed.Did, err)
-		ipfsShutdown()
+		ipfscore.Shutdown()
 		return err
 	}
-	ipfs.PublishIPNSRecordForDAGNode(ctx, ipfsNode, blk.Cid())
-	_, err = ipfs.PutIPFSDAGBlockToW3S(ctx, ipfsNode, node.CurrentConfig.W3SSecretKey, blk)
+	ipfs.PublishIPNSRecordForDAGNode(ctx, ipfscore.Api, blk.Cid())
+	_, err = ipfs.PutIPFSDAGBlockToW3S(ctx, ipfscore.Api, node.CurrentConfig.W3SSecretKey, blk)
 	if err != nil {
 		log.Errorf("could not pin IPFS block %v using Web3.Storage service")
-		ipfsShutdown()
+		ipfscore.Shutdown()
 		return err
 	}
 	err = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
-	ipfsShutdown()
+	ipfscore.Shutdown()
 	return err
 }
 
-func SaveNostrEvent(ctx context.Context, evt nostr.Event, ipfscore ipfs.IPFSCore) error {
-
-	store := ipfs.IPFSLinkStorage{
-		//ipfs: ipfscore.api,
-	}
-	//ipfscore.Api.Dag().
+func SaveNostrEvent(ctx context.Context, evt nostr.Event, ipfs ipfs.IPFSCore) error {
 	lsys := cidlink.DefaultLinkSystem()
-	lsys.SetReadStorage(&store)
-	lsys.SetWriteStorage(&store)
+	lsys.SetReadStorage(&ipfs)
+	lsys.SetWriteStorage(&ipfs)
 	lp := cidlink.LinkPrototype{
 		Prefix: cid.Prefix{
 			Version:  1,           // Usually '1'.
