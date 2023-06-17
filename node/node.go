@@ -15,8 +15,8 @@ import (
 
 type Config struct {
 	Did             string
-	NostrPrivKey    []byte
-	NostrPubKey     []byte
+	NostrPrivKey    string
+	NostrPubKey     string
 	IPFSPubKey      []byte
 	IPFSPrivKey     []byte
 	InfuraSecretKey string
@@ -50,7 +50,7 @@ func LoadConfig() (Config, error) {
 		log.Errorf("could not read JSON data from node configuration file: %v", err)
 		return Config{}, err
 	}
-	if config.NostrPrivKey == nil || config.NostrPubKey == nil {
+	if config.NostrPrivKey == "" || config.NostrPubKey == "" {
 		log.Errorf("Nostr private or public key not set in configuration file")
 		return Config{}, fmt.Errorf("NOSTR PRIVATE OR PUBLIC KEY NOT SET IN CONFIGURATION FILE")
 	}

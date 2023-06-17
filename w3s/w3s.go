@@ -5,13 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/ipfs/go-cid"
 )
-
-
 
 type PinResponse struct {
 	RequestID string
@@ -184,7 +183,8 @@ func (c *client) Pin(ctx context.Context, cid cid.Cid, options ...PinOption) (*P
 	}
 
 	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected response status: %d", res.StatusCode)
+		b, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("HTTP response status: %s %s", res.Status, string(b))
 	}
 	defer res.Body.Close()
 

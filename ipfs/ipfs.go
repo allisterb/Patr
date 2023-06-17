@@ -29,6 +29,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ipfs/go-cid"
+	ipldlegacy "github.com/ipfs/go-ipld-legacy"
 	"github.com/ipld/go-ipld-prime/datamodel"
 	"github.com/ipld/go-ipld-prime/fluent/qp"
 	"github.com/ipld/go-ipld-prime/linking"
@@ -81,14 +82,17 @@ func (store *IPFSCore) Get(ctx context.Context, key string) ([]byte, error) {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
 		return []byte{}, err
 	}
-	log.Infof("getting CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
+	log.Infof("getting IPLD node %v from IPFS DAG: %v", k)
 	r, err := store.Api.Block().Get(ctx, ipfspath.IpldPath(k))
 	if err != nil {
-		log.Errorf("could not get CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
+		log.Errorf("could not get IPLD node %v from IPFS DAG: %v", key, err)
 		return []byte{}, err
 	}
-	log.Infof("got CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
-	return io.ReadAll(r)
+	buf, _ := io.ReadAll(r)
+	b, _ := blocks.NewBlockWithCid(buf, k)
+	ul, err := ipldlegacy.DecodeNode(ctx, b)
+	log.Infof("got IPLD node %v from IPFS DAG", k, err)
+	return ul.RawData(), err
 }
 
 func (store *IPFSCore) Put(ctx context.Context, key string, data []byte) error {
@@ -97,31 +101,26 @@ func (store *IPFSCore) Put(ctx context.Context, key string, data []byte) error {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
 		return err
 	}
-	log.Infof("putting IPLD block %v to IPFS...", k)
+	log.Infof("putting IPLD block %v to IPFS DAG...", k)
 	b, _ := blocks.NewBlockWithCid(data, k)
-	r := bytes.NewReader(b.RawData())
-	s, err := store.Api.Block().Put(ctx, r)
-	if err == nil {
-		log.Infof("put IPLD block %v to IPFS at path %s with size %v bytes", k, s.Path(), s.Size())
-	} else {
-		log.Errorf("error putting IPLD block %v to IPFS: %v", k, err)
-		return err
-	}
-	log.Infof("putting IPLD block %v to Web3.Storage...", k)
-	//var cardata bytes.Buffer
-	err = PinIPFSBlockToW3S(ctx, store.Api, store.W3S.GetAuthToken(), b)
+	ul, err := ipldlegacy.DecodeNode(ctx, b)
 	if err != nil {
-		log.Errorf("could not pin block %v using Web3.Storage: %v", b.Cid(), err)
+		log.Errorf("could not decode ILPD node data as LegacyNode: %v", err)
 		return err
 	}
-	/*
-		pcid, err := store.W3S.PutCar(ctx, &cardata)
-		if err != nil {
-			log.Infof("put IPLD block %v to Web3.Storage at %v", k, pcid)
-		} else {
-			log.Errorf("error putting IPLD block %v to Web3.Storage: %v", k, err)
-		}
-	*/
+	err = store.Api.Dag().Pinning().Add(ctx, ul)
+	if err == nil {
+		log.Infof("put IPLD block %v to local IPFS DAG", k)
+	} else {
+		log.Errorf("error putting IPLD block %v to local IPFS DAG: %v", k, err)
+		return err
+	}
+	_, err = PinIPLDBlockToW3S(ctx, store.Api, store.W3S.GetAuthToken(), b)
+	if err == nil {
+		log.Infof("put IPLD block %v to IPFS DAG", k)
+	} else {
+		log.Errorf("error putting IPLD block %v to IPFS DAG: %v", k, err)
+	}
 	return err
 }
 
@@ -130,11 +129,18 @@ func (store *IPFSCore) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) 
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", lnk.Binary(), err)
 		return nil, err
-	} else {
-		p := ipfspath.IpldPath(k)
-		log.Infof("getting IPLD path %v from IPFS....", p)
-		return store.Api.Block().Get(lnkCtx.Ctx, p)
 	}
+	log.Infof("getting IPLD link %v from IPFS DAG: %v", k)
+	r, err := store.Api.Block().Get(lnkCtx.Ctx, ipfspath.IpldPath(k))
+	if err != nil {
+		log.Errorf("could not get IPLD node %v from IPFS DAG: %v", k, err)
+		return nil, err
+	}
+	buf, _ := io.ReadAll(r)
+	b, _ := blocks.NewBlockWithCid(buf, k)
+	ul, err := ipldlegacy.DecodeNode(lnkCtx.Ctx, b)
+	log.Infof("got IPLD link %v from IPFS DAG", k, err)
+	return bytes.NewReader(ul.RawData()), err
 }
 
 func (store *IPFSCore) OpenWrite(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Writer, linking.BlockWriteCommitter, error) {
@@ -314,6 +320,9 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCor
 		core.W3S = c
 		lsys := cidlink.DefaultLinkSystem()
 		lsys.SetReadStorage(&core)
+		//mem := memstore.Store {
+		//	Bag: make(map[string][]byte),
+		//}
 		lsys.SetWriteStorage(&core)
 		core.LS = lsys
 		return &core, e
@@ -349,7 +358,8 @@ func PinIPFSBlockToW3S(ctx context.Context, ipfs iface.CoreAPI, authToken string
 	}
 }
 
-func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken string, block *blocks.BasicBlock) (cid.Cid, error) {
+func PinIPLDBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken string, block *blocks.BasicBlock) (cid.Cid, error) {
+	log.Infof("pinning IPLD block %v using Web3.Storage pinning service...", block.Cid())
 	c, err := w3s.NewClient(w3s.WithToken(authToken))
 	if err != nil {
 		log.Errorf("could not create W3S client: %v", err)
@@ -366,8 +376,7 @@ func PutIPFSDAGBlockToW3S(ctx context.Context, ipfsNode iface.CoreAPI, authToken
 		log.Errorf("could not put block %v as CAR to W3S: %v", block.Cid(), err)
 		return cid.Cid{}, err
 	} else {
-		log.Infof("IPFS block %v pinned using Web3.Storage pinning service at %v", block.Cid(), pcid)
-
+		log.Infof("pinned IPLD block %v using Web3.Storage pinning service at %v", block.Cid(), pcid)
 		return pcid, err
 	}
 }
@@ -456,6 +465,7 @@ func PutNostrEventAsIPLDLink(ctx context.Context, ipfs IPFSCore, evt nostr.Event
 	if err != nil {
 		return nil, fmt.Errorf("could not create IPLD node from Nostr event %s: %v", evt.ID, err)
 	}
+
 	lp := cidlink.LinkPrototype{
 		Prefix: cid.Prefix{
 			Version:  1,           // Usually '1'.

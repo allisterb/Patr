@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"github.com/alecthomas/kong"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/mbndr/figlet4go"
-	"github.com/multiformats/go-multibase"
 	nip19 "github.com/nbd-wtf/go-nostr/nip19"
 
 	"github.com/allisterb/patr/blockchain"
@@ -116,9 +114,12 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 			log.Errorf("Could not generate Nostr secp256k1 keypair for %s: %v", c.Did, err)
 			return err
 		} else {
-			nppk, _ := nip19.EncodePublicKey(hex.EncodeToString(npk))
+			nppk, _ := nip19.EncodePublicKey(npk)
 			log.Infof("Nostr secp256k1 public key (nostrKey): %s\n", nppk)
 		}
+
+		//nssk, _ := nip19.EncodePrivateKey(nsk)
+		//nppk, _ := nip19.EncodePublicKey(npk)
 		config := node.Config{
 			Did:          c.Did,
 			IPFSPubKey:   pub,
@@ -212,21 +213,8 @@ func (c *FeedCmd) Run(clictx *kong.Context) error {
 
 func (c *NostrCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
-	case "gen-keys":
-		log.Info("Generating Nostr secp256k1 key-pair...")
-		priv, pub, err := nostr.GenerateKeyPair()
-		if err != nil {
-			log.Errorf("Error generating Nostr secp256k1 key-pair: %v", err)
-			return err
-		} else {
-			log.Info("Generated Nostr secp256k1 key-pair.")
-			privs, _ := multibase.Encode(multibase.Base58BTC, priv)
-			pubs, _ := multibase.Encode(multibase.Base58BTC, pub)
-			fmt.Printf("Private key: %s (KEEP THIS SAFE AND NEVER SHARE IT)\nPublic key: %s", privs, pubs)
-			return nil
-		}
 	default:
-		log.Errorf("Unknown feed command: %s", c.Cmd)
+		log.Errorf("Unknown nostr command: %s", c.Cmd)
 		return fmt.Errorf("UNKNOWN NOSTR COMMAND: %s", c.Cmd)
 	}
 

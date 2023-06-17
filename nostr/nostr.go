@@ -1,7 +1,8 @@
 package nostr
 
 import (
-	"encoding/hex"
+	"fmt"
+	"time"
 
 	"net/http"
 
@@ -15,24 +16,14 @@ import (
 
 var log = logging.Logger("patr/nostr")
 
-func GenerateKeyPair() ([]byte, []byte, error) {
+func GenerateKeyPair() (string, string, error) {
 	sk := nostr.GeneratePrivateKey()
 	pk, err := nostr.GetPublicKey(sk)
 	if err != nil {
 		log.Errorf("Error generating secp256k1 keypair: %v", err)
-		return []byte{}, []byte{}, err
+		return "", "", err
 	}
-	priv, err := hex.DecodeString(sk)
-	if err != nil {
-		log.Errorf("Error encoding secp256k1 private key: %v", err)
-		return []byte{}, []byte{}, err
-	}
-	pub, _ := hex.DecodeString(pk)
-	if err != nil {
-		log.Errorf("Error encoding secp256k1 public key: %v", err)
-		return []byte{}, []byte{}, err
-	}
-	return priv, pub, err
+	return sk, pk, err
 }
 
 type Logger struct {
@@ -80,11 +71,21 @@ func (r *Relay) OnInitialized(s *relayer.Server) {
 	log.Info("patr relay initialized")
 }
 
-func CreateBlankEvent() nostr.Event {
-	return nostr.Event{
+func CreateTestEvent(privkey string, text string) (nostr.Event, error) {
+	e := nostr.Event{
 		ID:        "0",
-		Content:   "test",
-		CreatedAt: 1,
+		Content:   text,
+		CreatedAt: nostr.Timestamp(time.Now().UnixMicro()),
+		Kind:      nostr.KindApplicationSpecificData,
 	}
-
+	err := e.Sign(privkey)
+	if err != nil {
+		return nostr.Event{}, err
+	}
+	sc, err := e.CheckSignature()
+	if sc && err == nil {
+		return nostr.Event{}, nil
+	} else {
+		return nostr.Event{}, fmt.Errorf("signing test event failed")
+	}
 }
