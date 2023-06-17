@@ -79,3 +79,12 @@ func (r *Relay) OnInitialized(s *relayer.Server) {
 	})
 	log.Info("patr relay initialized")
 }
+
+func CreateBlankEvent() nostr.Event {
+	return nostr.Event{
+		ID:        "0",
+		Content:   "test",
+		CreatedAt: 1,
+	}
+
+}

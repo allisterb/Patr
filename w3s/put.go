@@ -10,8 +10,7 @@ import (
 	"github.com/ipfs/go-cid"
 )
 
-// TODO: retry
-func (c *client) sendCar(ctx context.Context, r io.Reader) (cid.Cid, error) {
+func (c *client) PutCar(ctx context.Context, r io.Reader) (cid.Cid, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", c.cfg.endpoint+"/car", r)
 	if err != nil {
 		return cid.Undef, err
@@ -24,7 +23,8 @@ func (c *client) sendCar(ctx context.Context, r io.Reader) (cid.Cid, error) {
 		return cid.Undef, err
 	}
 	if res.StatusCode != 200 {
-		return cid.Undef, fmt.Errorf("unexpected response status: %d", res.StatusCode)
+		b, _ := io.ReadAll(res.Body)
+		return cid.Undef, fmt.Errorf("error putting CAR data to Web3.Storage: %v %v", res.Status, b)
 	}
 	d := json.NewDecoder(res.Body)
 	var out struct {
@@ -35,10 +35,4 @@ func (c *client) sendCar(ctx context.Context, r io.Reader) (cid.Cid, error) {
 		return cid.Undef, err
 	}
 	return cid.Parse(out.Cid)
-}
-
-// PutCar uploads a CAR (Content Addressable Archive) to Web3.Storage.
-func (c *client) PutCar(ctx context.Context, car io.Reader) (cid.Cid, error) {
-	root, err := c.sendCar(ctx, car)
-	return root, err
 }

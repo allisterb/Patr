@@ -47,12 +47,15 @@ type IPFSCore struct {
 	Node     ipfsCore.IpfsNode
 	Shutdown func()
 	LS       linking.LinkSystem
+	W3S      w3s.Client
 }
 
 type IPFSLinkWriter struct {
 	ctx  context.Context
 	ipfs iface.CoreAPI
 	cid  cid.Cid
+	w3s  w3s.Client
+	log  *logging.ZapEventLogger
 	data bytes.Buffer
 }
 
@@ -60,15 +63,6 @@ var log = logging.Logger("patr/ipfs")
 
 func (w *IPFSLinkWriter) Write(d []byte) (int, error) {
 	return w.data.Read(d)
-}
-
-func (w *IPFSLinkWriter) BlockWriteCommit(lnk datamodel.Link) error {
-	b, err := blocks.NewBlockWithCid(w.data.Bytes(), w.cid)
-	if err != nil {
-		return err
-	}
-	_, err = w.ipfs.Block().Put(w.ctx, bytes.NewReader(b.RawData()))
-	return err
 }
 
 func (store *IPFSCore) Has(ctx context.Context, key string) (bool, error) {
@@ -87,11 +81,13 @@ func (store *IPFSCore) Get(ctx context.Context, key string) ([]byte, error) {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
 		return []byte{}, err
 	}
+	log.Infof("getting CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
 	r, err := store.Api.Block().Get(ctx, ipfspath.IpldPath(k))
 	if err != nil {
 		log.Errorf("could not get CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
 		return []byte{}, err
 	}
+	log.Infof("got CID %v at path %v from IPFS block storage: %v", key, ipfspath.IpldPath(k), err)
 	return io.ReadAll(r)
 }
 
@@ -101,9 +97,31 @@ func (store *IPFSCore) Put(ctx context.Context, key string, data []byte) error {
 		log.Errorf("could not create CID from key string %s: %v", key, err)
 		return err
 	}
+	log.Infof("putting IPLD block %v to IPFS...", k)
 	b, _ := blocks.NewBlockWithCid(data, k)
 	r := bytes.NewReader(b.RawData())
-	_, err = store.Api.Block().Put(ctx, r)
+	s, err := store.Api.Block().Put(ctx, r)
+	if err == nil {
+		log.Infof("put IPLD block %v to IPFS at path %s with size %v bytes", k, s.Path(), s.Size())
+	} else {
+		log.Errorf("error putting IPLD block %v to IPFS: %v", k, err)
+		return err
+	}
+	log.Infof("putting IPLD block %v to Web3.Storage...", k)
+	//var cardata bytes.Buffer
+	err = PinIPFSBlockToW3S(ctx, store.Api, store.W3S.GetAuthToken(), b)
+	if err != nil {
+		log.Errorf("could not pin block %v using Web3.Storage: %v", b.Cid(), err)
+		return err
+	}
+	/*
+		pcid, err := store.W3S.PutCar(ctx, &cardata)
+		if err != nil {
+			log.Infof("put IPLD block %v to Web3.Storage at %v", k, pcid)
+		} else {
+			log.Errorf("error putting IPLD block %v to Web3.Storage: %v", k, err)
+		}
+	*/
 	return err
 }
 
@@ -112,8 +130,11 @@ func (store *IPFSCore) OpenRead(lnkCtx linking.LinkContext, lnk datamodel.Link) 
 	if err != nil {
 		log.Errorf("could not create CID from key string %s: %v", lnk.Binary(), err)
 		return nil, err
+	} else {
+		p := ipfspath.IpldPath(k)
+		log.Infof("getting IPLD path %v from IPFS....", p)
+		return store.Api.Block().Get(lnkCtx.Ctx, p)
 	}
-	return store.Api.Block().Get(lnkCtx.Ctx, ipfspath.IpldPath(k))
 }
 
 func (store *IPFSCore) OpenWrite(lnkCtx linking.LinkContext, lnk datamodel.Link) (io.Writer, linking.BlockWriteCommitter, error) {
@@ -126,25 +147,59 @@ func (store *IPFSCore) OpenWrite(lnkCtx linking.LinkContext, lnk datamodel.Link)
 		ctx:  lnkCtx.Ctx,
 		ipfs: store.Api,
 		cid:  k,
+		w3s:  store.W3S,
+		log:  log,
+		data: bytes.Buffer{},
 	}
 	return &lw, lw.BlockWriteCommit, nil
 }
 
-// func
+func (w *IPFSLinkWriter) BlockWriteCommit(lnk datamodel.Link) error {
+	/*
+		b, err := blocks.NewBlockWithCid(w.data.Bytes(), w.cid)
+		if err != nil {
+			return err
+		}
+		w.log.Infof("putting IPLD block %v to IPFS...", w.cid)
+		s, err := w.ipfs.Block().Put(w.ctx, bytes.NewReader(b.RawData()))
+		if err != nil {
+			w.log.Infof("put IPLD block %v to IPFS at path %s with size %v bytes", w.cid, s.Path(), s.Size())
+		} else {
+			w.log.Errorf("error putting IPLD block %v to IPFS: %v", w.cid, err)
+			return err
+		}
+		w.log.Infof("putting IPLD block %v to Web3.Storage...", w.cid)
+		var cardata bytes.Buffer
+		err = w3s.WriteCar(w.ctx, w.ipfs.Dag(), []cid.Cid{b.Cid()}, &cardata)
+		if err != nil {
+			w.log.Errorf("could not serialize block %v as CAR: %v", b.Cid(), err)
+			return err
+		}
+		pcid, err := w.w3s.PutCar(w.ctx, &cardata)
+		if err != nil {
+			w.log.Infof("put IPLD block %v to Web3.Storage at %v", w.cid, pcid)
+		} else {
+			w.log.Errorf("error putting IPLD block %v to Web3.Storage: %v", w.cid, err)
+		}
+		return err
+	*/
+	return nil
+}
+
 func GenerateIPNSKeyPair() ([]byte, []byte, error) {
 	priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
 	if err != nil {
-		log.Errorf("Error generating RSA 2048-bit keypair: %v", err)
+		log.Errorf("error generating RSA 2048-bit keypair: %v", err)
 		return []byte{}, []byte{}, err
 	}
 	privkeyb, err := crypto.MarshalPrivateKey(priv)
 	if err != nil {
-		log.Errorf("Error marshalling RSA 2048-bit private key: %v", err)
+		log.Errorf("error marshalling RSA 2048-bit private key: %v", err)
 		return []byte{}, []byte{}, err
 	}
 	pubkeyb, err := crypto.MarshalPublicKey(pub)
 	if err != nil {
-		log.Errorf("Error marshalling RSA 2048-bit public key: %v", err)
+		log.Errorf("error marshalling RSA 2048-bit public key: %v", err)
 		return []byte{}, []byte{}, err
 	}
 	return privkeyb, pubkeyb, err
@@ -251,6 +306,12 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCor
 			Node:     *node,
 			Shutdown: shutdown,
 		}
+		c, err := w3s.NewClient(w3s.WithToken("none"))
+		if err != nil {
+			log.Errorf("could not create W3S client: %v", err)
+			return nil, err
+		}
+		core.W3S = c
 		lsys := cidlink.DefaultLinkSystem()
 		lsys.SetReadStorage(&core)
 		lsys.SetWriteStorage(&core)
@@ -369,22 +430,13 @@ func PublishIPNSRecordForDAGNodeToW3S(ctx context.Context, authToken string, cid
 		return err
 	}
 
-	err = c.PutName(ctx, nr, "k51qzi5uqu5dlcuzv5xhg1zqn48gobcvn2mx13uoig7zfj8rz6zvqdxsugka9z")
+	err = c.PutName(ctx, nr, name)
 	if err == nil {
 		log.Infof("published DAG node %v at path %s to IPNS name %s using Web3.Storage", cid, p, name)
 	} else {
-		log.Errorf("could not publishe DAG node %v at path %s to IPNS name %s using Web3.Storage: %v", cid, p, name, err)
+		log.Errorf("could not publish DAG node %v at path %s to IPNS name %s using Web3.Storage: %v", cid, p, name, err)
 	}
-
 	return err
-	//r, err := c.GetName(ctx)
-	//ipfsNode.
-	//ipfsNode.Name().Publish(ctx, path.IpldPath(cid), options.Name.Key())
-	//sk, err := crypto.UnmarshalPrivateKey(privkey)
-	//ipfsNode.Name().(ctx, path.IpldPath(cid), options.Name.Key())
-	//ipnsRecord, err := ipns.Create(sk, cid.Bytes(), 0, time.Now().Add(1*time.Hour))
-	//ipnsRecord.
-	//ipnsRecord.
 }
 
 func PutNostrEventAsIPLDLink(ctx context.Context, ipfs IPFSCore, evt nostr.Event) (datamodel.Link, error) {
@@ -400,7 +452,6 @@ func PutNostrEventAsIPLDLink(ctx context.Context, ipfs IPFSCore, evt nostr.Event
 		}))
 		qp.MapEntry(ma, "content", qp.String(evt.Content))
 		qp.MapEntry(ma, "sig", qp.String(evt.Sig))
-		//PutIPFSDAGBlockToW3S(ctx, ipfscore.Api, )
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not create IPLD node from Nostr event %s: %v", evt.ID, err)

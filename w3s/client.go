@@ -27,6 +27,8 @@ type Client interface {
 	Pin(context.Context, cid.Cid, ...PinOption) (*PinResponse, error)
 	GetName(context.Context, string) (*ipns_pb.IpnsEntry, error)
 	PutName(context.Context, *ipns_pb.IpnsEntry, string) error
+	GetAuthToken() string
+	SetAuthToken(string)
 }
 
 type clientConfig struct {
@@ -48,6 +50,14 @@ func (c *client) Get(ctx context.Context, cid cid.Cid) (*Web3Response, error) {
 	req.Header.Add("X-Client", clientName)
 	res, err := c.cfg.hc.Do(req)
 	return &Web3Response{Response: res}, err
+}
+
+func (c *client) GetAuthToken() string {
+	return c.cfg.token
+}
+
+func (c *client) SetAuthToken(token string) {
+	c.cfg.token = token
 }
 
 // NewClient creates a new web3.storage API client.

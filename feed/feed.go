@@ -13,17 +13,17 @@ import (
 	"github.com/ipld/go-ipld-prime/codec/dagjson"
 	"github.com/ipld/go-ipld-prime/datamodel"
 	"github.com/ipld/go-ipld-prime/fluent/qp"
-	"github.com/ipld/go-ipld-prime/linking"
+
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	"github.com/ipld/go-ipld-prime/node/basicnode"
-	"github.com/ipld/go-ipld-prime/node/bindnode"
+
 	mh "github.com/multiformats/go-multihash"
-	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/allisterb/patr/blockchain"
 	"github.com/allisterb/patr/did"
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
+	"github.com/allisterb/patr/nostr"
 )
 
 type Feed struct {
@@ -54,6 +54,7 @@ func CreateFeed(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	ipfscore.W3S.SetAuthToken(node.CurrentConfig.W3SSecretKey)
 	feed := Feed{Did: node.CurrentConfig.Did}
 	dagnode, err := qp.BuildMap(basicnode.Prototype.Any, 4, func(ma datamodel.MapAssembler) {
 		qp.MapEntry(ma, "Did", qp.String(feed.Did))
@@ -107,24 +108,8 @@ func CreateFeed(ctx context.Context) error {
 		return err
 	}
 	err = ipfs.PublishIPNSRecordForDAGNodeToW3S(ctx, node.CurrentConfig.W3SSecretKey, blk.Cid(), node.CurrentConfig.IPFSPrivKey, node.CurrentConfig.IPFSPubKey)
+	e := nostr.CreateBlankEvent()
+	_, err = ipfs.PutNostrEventAsIPLDLink(ctx, *ipfscore, e)
 	ipfscore.Shutdown()
-	return err
-}
-
-func SaveNostrEvent(ctx context.Context, evt nostr.Event, ipfs ipfs.IPFSCore) error {
-	lsys := cidlink.DefaultLinkSystem()
-	lsys.SetReadStorage(&ipfs)
-	lsys.SetWriteStorage(&ipfs)
-	lp := cidlink.LinkPrototype{
-		Prefix: cid.Prefix{
-			Version:  1,           // Usually '1'.
-			Codec:    cid.DagJSON, // 0x71 means "dag-cbor" -- See the multicodecs table: https://github.com/multiformats/multicodec/
-			MhType:   mh.SHA3_384, // 0x20 means "sha2-512" -- See the multicodecs table: https://github.com/multiformats/multicodec/
-			MhLength: 48,          // sha2-512 hash has a 64-byte sum.
-		}}
-	dagnode := bindnode.Wrap(&evt, nil)
-	_, err := lsys.Store(linking.LinkContext{}, lp, dagnode)
-	//lsys.Load()
-
 	return err
 }
