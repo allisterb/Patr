@@ -283,7 +283,7 @@ func initIPFSRepo(ctx context.Context, privkey []byte, pubkey []byte) repo.Repo 
 	c := cfg.Config{}
 	c.Pubsub.Enabled = cfg.True
 	c.Bootstrap = []string{
-		//"/ip4/38.132.215.232/tcp/4001/p2p/QmWHXv9o2wBTiuwV1e2bAqfJVK3poLo13DhpCXyWjowDn2",
+		"/ip4/38.132.215.232/tcp/4001/p2p/QmWHXv9o2wBTiuwV1e2bAqfJVK3poLo13DhpCXyWjowDn2",
 		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
 		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
 		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
