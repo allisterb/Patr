@@ -1,8 +1,6 @@
 package did
 
 import (
-	"fmt"
-
 	logging "github.com/ipfs/go-log/v2"
 	ssi "github.com/nuts-foundation/go-did"
 	godid "github.com/nuts-foundation/go-did/did"
@@ -22,15 +20,15 @@ func Parse(str string) (*godid.Document, error) {
 	return doc, err
 }
 
-func IsValid(str string) (bool, error) {
+func IsValid(str string) bool {
 	d, err := Parse(str)
 	if err != nil {
 		log.Errorf("Could not parse DID %s: %v", str, err)
-		return false, err
+		return false
 	} else if d.ID.Method != "ens" {
 		log.Errorf("invalid DID: %s. Only ENS DIDs are supported currently", str)
-		return false, fmt.Errorf("INVALID DID: %s. ONLY ENS DIDS ARE SUPPORTED CURRENTLY", str)
+		return false
 	} else {
-		return true, nil
+		return true
 	}
 }

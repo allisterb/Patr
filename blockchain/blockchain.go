@@ -13,7 +13,7 @@ import (
 
 type ENSName struct {
 	Address     string
-	IPNSPubKey  string
+	IPFSPubKey  string
 	NostrPubKey string
 	ContentHash cid.Cid
 	Avatar      string
@@ -23,7 +23,7 @@ var log = logging.Logger("patr/blockchain")
 
 func ResolveENS(name string, apikey string) (ENSName, error) {
 	if apikey == "" {
-		return ENSName{}, fmt.Errorf("The Infura API secret key is not set in the node configuration")
+		return ENSName{}, fmt.Errorf("The Infura API secret key was not specified")
 	}
 	log.Infof("resolving ENS name %v...", name)
 	client, err := ethclient.Dial(fmt.Sprintf("https://mainnet.infura.io/v3/%s", apikey))
@@ -48,7 +48,6 @@ func ResolveENS(name string, apikey string) (ENSName, error) {
 	}
 	chashcid := cid.Cid{}
 	if chash != nil && binary.Size(chash) > 0 && chash[0] == 0xe3 {
-		//_, str, err := multibase.Decode(chash[1:])
 		_, chashcid, err = cid.CidFromBytes(chash[2:])
 		if err != nil {
 			log.Errorf("could not decode IPFS content hash as CID: %v", err)
@@ -58,9 +57,9 @@ func ResolveENS(name string, apikey string) (ENSName, error) {
 	if err != nil {
 		log.Warnf("could not resolve avatar text record for ENS name %s: %v", name, err)
 	}
-	ipnsKey, err := r.Text("ipnsKey")
+	ipfsKey, err := r.Text("ipfsKey")
 	if err != nil {
-		log.Warnf("could not resolve ipnsKey text record for ENS name %s: %v", name, err)
+		log.Warnf("could not resolve ipfsKey text record for ENS name %s: %v", name, err)
 	}
 	nostrKey, err := r.Text("nostrKey")
 	if err != nil {
@@ -71,7 +70,7 @@ func ResolveENS(name string, apikey string) (ENSName, error) {
 
 	record := ENSName{
 		Address:     address.Hex(),
-		IPNSPubKey:  ipnsKey,
+		IPFSPubKey:  ipfsKey,
 		NostrPubKey: nostrKey,
 		ContentHash: chashcid,
 		Avatar:      avatar,

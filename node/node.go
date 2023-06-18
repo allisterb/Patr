@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/allisterb/patr/ipfs"
+	"github.com/allisterb/patr/p2p"
 	"github.com/allisterb/patr/util"
 )
 
@@ -22,6 +24,12 @@ type Config struct {
 	InfuraSecretKey string
 	W3SSecretKey    string
 	IPNSKeys        map[byte]byte
+}
+
+type NodeRun struct {
+	Ctx    context.Context
+	Config Config
+	Ipfs   ipfs.IPFSCore
 }
 
 var log = logging.Logger("patr/node")
@@ -72,13 +80,21 @@ func LoadConfig() (Config, error) {
 }
 
 func Run(ctx context.Context) error {
-	PanicIfNotInitialized()
+	_, err := LoadConfig()
+	if err != nil {
+		return err
+	}
 	log.Info("starting patr node...")
 	ipfs, err := ipfs.StartIPFSNode(ctx, CurrentConfig.IPFSPrivKey, CurrentConfig.IPFSPubKey)
 	if err != nil {
 		log.Errorf("error starting IPFS node: %v", err)
 		return err
 	}
+	p2p.SetDMStreamHandler(*ipfs, CurrentConfig.InfuraSecretKey)
+	log.Info("patr node started, press Ctrl-C to stop...")
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
 	ipfs.Shutdown()
-	return nil
+	return err
 }

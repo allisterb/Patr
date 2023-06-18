@@ -86,7 +86,7 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 		if c.Did == "" {
 			return fmt.Errorf("you must specify a user DID to initialize the node")
 		}
-		if v, _ := did.IsValid(c.Did); !v {
+		if !did.IsValid(c.Did) {
 			return fmt.Errorf("Invalid DID: %s", c.Did)
 		}
 		d := filepath.Join(util.GetUserHomeDir(), ".patr")
@@ -138,28 +138,14 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 		log.Infof("patr node configuration initialized at %s", filepath.Join(d, "node.json"))
 		log.Info("add your Infura and Web3.Storage API secret keys to this file to complete the configuration")
 		return nil
+
 	case "run":
-		f := filepath.Join(filepath.Join(util.GetUserHomeDir(), ".patr"), "node.json")
-		if _, err := os.Stat(f); err != nil {
-			log.Errorf("could not find node configuration file %s", f)
-			return nil
-		}
-		c, err := os.ReadFile(f)
-		if err != nil {
-			log.Errorf("could not read data from node configuration file: %v", err)
-			return err
-		}
-		var config node.Config
-		if json.Unmarshal(c, &config) != nil {
-			log.Errorf("could not read JSON data from node configuration file: %v", err)
-			return err
-		}
 		ctx, _ := context.WithCancel(context.Background())
-		err = node.Run(ctx)
+		err := node.Run(ctx)
 		return err
+
 	default:
-		log.Errorf("Unknown node command: %s", c.Cmd)
-		return fmt.Errorf("UNKNOWN NODE COMMAND: %s", c.Cmd)
+		return fmt.Errorf("Unknown node command: %s", c.Cmd)
 	}
 }
 
@@ -182,7 +168,7 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 		}
 		r, err := blockchain.ResolveENS(d.ID.ID, config.InfuraSecretKey)
 		if err == nil {
-			fmt.Printf("ETH Address: %s\nNostr Public-Key: %v\nIPNS Public-Key: %s\nContent-Hash: %s\nAvatar: %s", r.Address, r.NostrPubKey, r.IPNSPubKey, r.ContentHash, r.Avatar)
+			fmt.Printf("ETH Address: %s\nNostr Public-Key: %v\nIPFS Public-Key: %s\nContent-Hash: %s\nAvatar: %s", r.Address, r.NostrPubKey, r.IPFSPubKey, r.ContentHash, r.Avatar)
 			return nil
 		} else {
 			return err

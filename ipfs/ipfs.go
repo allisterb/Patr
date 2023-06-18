@@ -248,6 +248,22 @@ func GetIPFSNodeIdentity(pubb []byte) peer.ID {
 	return id
 }
 
+func GetIPFSNodeIdentityFromPublicKeyName(key string) (peer.ID, error) {
+	_, b, err := multibase.Decode(key)
+	if err != nil {
+		return "", fmt.Errorf("could not decode %s as a multibase string: %v", key, err)
+	}
+	_, c, err := cid.CidFromBytes(b)
+	if err != nil {
+		return "", fmt.Errorf("could not decode %s as a CID: %v", key, err)
+	}
+	id, err := peer.FromCid(c)
+	if err != nil {
+		return "", fmt.Errorf("could not get peer ID from CID %v : %v", c, err)
+	}
+	return id, nil
+}
+
 func GetIPNSPublicKeyName(pubb []byte) (string, error) {
 	pub, err := crypto.UnmarshalPublicKey(pubb)
 	if err != nil {
@@ -319,13 +335,14 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCor
 			return nil, err
 		}
 		core.W3S = c
+
 		lsys := cidlink.DefaultLinkSystem()
 		lsys.SetReadStorage(&core)
-		//mem := memstore.Store {
-		//	Bag: make(map[string][]byte),
-		//}
 		lsys.SetWriteStorage(&core)
 		core.LS = lsys
+
+		//node.PeerHost.SetStreamHandler()
+
 		return &core, e
 	}
 }
