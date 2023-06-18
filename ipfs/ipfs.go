@@ -313,7 +313,8 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCor
 		log.Errorf("error staring IPFS node %s: %v", GetIPFSNodeIdentity(pubkey).Pretty(), err)
 		return nil, err
 	}
-	log.Infof("IPFS node %s started", node.Identity.Pretty())
+	pubk, _ := GetIPNSPublicKeyName(pubkey)
+	log.Infof("IPFS node %s (%v) started", node.Identity.Pretty(), pubk)
 	c, e := coreapi.NewCoreAPI(node)
 	if e != nil {
 		return nil, e

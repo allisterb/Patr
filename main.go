@@ -19,6 +19,7 @@ import (
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/node"
 	"github.com/allisterb/patr/nostr"
+	"github.com/allisterb/patr/p2p"
 	"github.com/allisterb/patr/util"
 )
 
@@ -28,16 +29,17 @@ type NodeCmd struct {
 }
 
 type DidCmd struct {
-	Cmd  string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, init-user, profile."`
+	Cmd  string `arg:"" name:"cmd" help:"The command to run. Can be one of: resolve, dm"`
 	Name string `arg:"" name:"name" help:"Get the DID linked to this name."`
+	Arg  string `arg:"" optional:"" name:"did" help:"Argument for the DID command."`
 }
 
 type FeedCmd struct {
-	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: gen-keys."`
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: create."`
 }
 
 type NostrCmd struct {
-	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: gen-keys."`
+	Cmd string `arg:"" name:"cmd" help:"The command to run. Can be one of: create-event."`
 }
 
 var log = logging.Logger("patr/main")
@@ -151,6 +153,7 @@ func (c *NodeCmd) Run(clictx *kong.Context) error {
 
 func (c *DidCmd) Run(clictx *kong.Context) error {
 	switch strings.ToLower(c.Cmd) {
+
 	case "resolve":
 		d, err := did.Parse(c.Name)
 		if err != nil {
@@ -174,9 +177,30 @@ func (c *DidCmd) Run(clictx *kong.Context) error {
 			return err
 		}
 
+	case "dm":
+		if !did.IsValid(c.Name) {
+			return fmt.Errorf("%s is not a valid Patr DID", c.Name)
+		}
+		d, err := did.Parse(c.Name)
+		if err != nil {
+			log.Errorf("could not parse DID %s: %v", c.Name, err)
+			return err
+		}
+		config, err := node.LoadConfig()
+		if err != nil {
+			return fmt.Errorf("could not load patr node config")
+		}
+		ctx, _ := context.WithCancel(context.Background())
+		ipfscore, err := ipfs.StartIPFSNode(ctx, config.IPFSPrivKey, config.IPFSPubKey)
+		if err != nil {
+			return fmt.Errorf("could not start patr IPFS node")
+		}
+		err = p2p.SendDM(ctx, *ipfscore, config.InfuraSecretKey, d.ID.ID, c.Arg)
+		ipfscore.Shutdown()
+		return err
+
 	default:
-		log.Errorf("Unknown did command: %s", c.Cmd)
-		return fmt.Errorf("UNKNOWN DID COMMAND: %s", c.Cmd)
+		return fmt.Errorf("Unknown did command: %s", c.Cmd)
 	}
 }
 

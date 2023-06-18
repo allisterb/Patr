@@ -2,7 +2,9 @@ package p2p
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -56,8 +58,48 @@ func DMHandler(_s network.Stream, apiKey string) {
 			return
 		}
 		log.Infof("the remote peer ID %v matches the DID peer ID %v for %s", s.Conn().RemotePeer(), pid, did.ID.ID)
+		rw.WriteString("delivered")
 		log.Infof("direct message from %v: %s", did.ID.ID, dm.Content)
 	}(_s, _rw)
+}
+
+func SendDM(ctx context.Context, ipfscore ipfs.IPFSCore, apikey string, did string, text string) error {
+	n, err := blockchain.ResolveENS(did, apikey)
+	if err != nil {
+		return fmt.Errorf("could not resolve ENS name %s: %v", did)
+	}
+	log.Infof("sending DM to DID %s...", did)
+	pid, err := ipfs.GetIPFSNodeIdentityFromPublicKeyName(n.IPFSPubKey)
+	if err != nil {
+		return fmt.Errorf("could not get IPFS node identity from string %s: %v", n.IPFSPubKey, err)
+	}
+	addr, err := ipfscore.Node.DHT.FindPeer(ctx, pid)
+	if err != nil {
+		return fmt.Errorf("the node %v for DID %s is not online. Authenticated DMs cannot be sent to this DID right now", pid, did)
+	} else {
+		log.Infof("the node %v for DID %s is online at address %v", pid, did, addr)
+	}
+	s, err := ipfscore.Node.PeerHost.NewStream(ctx, pid, protocol.ID("patrchat/0.1"))
+	rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
+	dm := DM{
+		Did:     did,
+		Content: text,
+	}
+	bdm, _ := json.Marshal(dm)
+	_, err = rw.Write(bdm)
+	if err != nil {
+		return fmt.Errorf("could not write DM to stream to peer %v: %v", pid, err)
+	}
+	resp, err := rw.ReadString(byte(0))
+	if err != nil {
+		return fmt.Errorf("could not response to DM from stream to peer %v: %v", pid, err)
+	}
+	if resp == "delivered" {
+		log.Infof("delivered DM to DID %s", did)
+		return nil
+	} else {
+		return fmt.Errorf("did not deliver DM to %s", did)
+	}
 }
 
 func EventQueryHandler(s network.Stream) {
