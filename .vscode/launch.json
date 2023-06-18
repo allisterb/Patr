@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["did", "dm", "did:ens:allisterb.eth", "hello"],
+            "args": ["node", "run"],
             "env": {"GOLOG_LOG_LEVEL":"debug"}
         }
     ]

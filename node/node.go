@@ -7,11 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"time"
 
-	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
-	mh "github.com/multiformats/go-multihash"
 
 	"github.com/allisterb/patr/ipfs"
 	"github.com/allisterb/patr/p2p"
@@ -93,11 +90,11 @@ func Run(ctx context.Context) error {
 		log.Errorf("error starting IPFS node: %v", err)
 		return err
 	}
-	c, _ := cid.NewPrefixV1(cid.Raw, mh.SHA2_256).Sum([]byte("patr"))
-	tctx, _ := context.WithTimeout(ctx, time.Second*10)
-	if err := ipfs.Node.DHTClient.Provide(tctx, c, true); err != nil {
-		log.Errorf("could not provide patr topic: %v", err)
-	}
+	//c, _ := cid.NewPrefixV1(cid.Raw, mh.SHA2_256).Sum([]byte("patr"))
+	//tctx, _ := context.WithTimeout(ctx, time.Second*10)
+	//if err := ipfs.Node.DHTClient.Provide(tctx, c, true); err != nil {
+	//	log.Errorf("could not provide patr topic: %v", err)
+	//}
 	p2p.SetDMStreamHandler(*ipfs, CurrentConfig.InfuraSecretKey)
 	log.Info("patr node started, press Ctrl-C to stop...")
 	quit := make(chan os.Signal, 1)
