@@ -8,9 +8,12 @@ import (
 	"os/signal"
 	"path/filepath"
 
+	"github.com/fiatjaf/relayer"
+
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/allisterb/patr/ipfs"
+	"github.com/allisterb/patr/nostr"
 	"github.com/allisterb/patr/p2p"
 	"github.com/allisterb/patr/util"
 )
@@ -96,6 +99,19 @@ func Run(ctx context.Context) error {
 	//	log.Errorf("could not provide patr topic: %v", err)
 	//}
 	p2p.SetDMStreamHandler(*ipfs, CurrentConfig.InfuraSecretKey)
+
+	r := nostr.Relay{
+		Ipfscore: *ipfs,
+	}
+
+	server := relayer.NewServer("0.0.0.0:4002", &r)
+	if err != nil {
+		log.Fatalf("failed to create server: %v", err)
+	}
+	if err := server.Start(); err != nil {
+		log.Fatalf("server terminated: %v", err)
+	}
+
 	log.Info("patr node started, press Ctrl-C to stop...")
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
