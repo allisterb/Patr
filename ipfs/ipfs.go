@@ -342,8 +342,8 @@ func StartIPFSNode(ctx context.Context, privkey []byte, pubkey []byte) (*IPFSCor
 		lsys.SetWriteStorage(&core)
 		core.LS = lsys
 
-		//node.PeerHost.SetStreamHandler()
-
+		_, err = core.Api.PubSub().Subscribe(ctx, "patr")
+		core.Api.PubSub().Publish(ctx, "patr", []byte{byte(1)})
 		return &core, e
 	}
 }

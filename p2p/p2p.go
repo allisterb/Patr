@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ipfs/boxo/coreiface/options"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -73,13 +74,28 @@ func SendDM(ctx context.Context, ipfscore ipfs.IPFSCore, apikey string, did stri
 	if err != nil {
 		return fmt.Errorf("could not get IPFS node identity from string %s: %v", n.IPFSPubKey, err)
 	}
-	addr, err := ipfscore.Node.DHT.FindPeer(ctx, pid)
+	log.Infof("IPFS node identity for %s is %v", did, pid)
+	addr, err := ipfscore.Node.DHTClient.FindPeer(ctx, pid)
 	if err != nil {
-		return fmt.Errorf("the node %v for DID %s is not online. Authenticated DMs cannot be sent to this DID right now", pid, did)
+		peers, _ := ipfscore.Api.PubSub().Peers(ctx, options.PubSub.Topic("patr"))
+		var found bool = false
+		for i := range peers {
+			if peers[i] == pid {
+				found = true
+				log.Infof("found")
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("the node %v for DID %s is not online. Authenticated DMs cannot be sent to this DID right now", pid, did)
+		}
 	} else {
 		log.Infof("the node %v for DID %s is online at address %v", pid, did, addr)
 	}
 	s, err := ipfscore.Node.PeerHost.NewStream(ctx, pid, protocol.ID("patrchat/0.1"))
+	if err != nil {
+		return fmt.Errorf("could not open new stream to peer", pid)
+	}
 	rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
 	dm := DM{
 		Did:     did,
